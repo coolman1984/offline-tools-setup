@@ -2,7 +2,7 @@
 
 The Windows Safe Care Center is the workstation-readiness and conservative repair layer of the Offline Automation & Development Suite.
 
-Its purpose is to prevent a development/automation installation from being blocked by an unhealthy workstation while preserving Windows stability, enterprise security policy, user data, update rollback capability, and bootability.
+Its purpose is to prevent a development/automation installation from being blocked by an unhealthy workstation while preserving Windows stability, enterprise security policy, user data, update rollback capability, encryption, recovery capability, and bootability.
 
 ## Design rule
 
@@ -19,6 +19,10 @@ The suite must never:
 - delete `C:\Windows\WinSxS` manually
 - delete `C:\Windows\Installer`
 - alter BCD/boot configuration as a maintenance shortcut
+- enable, disable or reconfigure Windows RE automatically
+- suspend or disable BitLocker automatically
+- write Secure Boot firmware variables automatically
+- resize system/recovery partitions automatically
 - disable Defender, application control, AppLocker, WDAC, UAC or enterprise security policy
 - disable TLS certificate validation
 - automatically delete or replace device drivers
@@ -48,21 +52,39 @@ Designed to run before normal workstation setup:
 
 - disk-space analysis
 - pending-restart detection
+- Windows Installer health
+- Windows time/synchronization health
+- Windows runtime and recovery readiness
+- development-environment readiness
 - DISM CheckHealth
-- SFC verify-only
 - online CHKDSK scan
 - physical storage health
 - device problem enumeration
-- recent critical/error event summary
 - Windows Update health
 
 ### Deep Diagnostics
 
-Adds deeper component-store and power diagnostics. It can take substantially longer.
+Adds VSS, deeper component-store, SFC verify-only, event-log and power diagnostics. It can take substantially longer.
 
 ### All Diagnostics
 
 Runs every diagnostic action in the catalog. No cleanup or repair action is included.
+
+## Recovery, encryption and boot-readiness diagnostics
+
+The runtime/recovery readiness check is read-only and records:
+
+- Windows Recovery Environment state from `reagentc /info`
+- BitLocker volume state and key-protector types where available
+- TPM readiness
+- Secure Boot enabled/disabled state
+- Secure Boot 2023 certificate-servicing status where Windows exposes it
+- recent relevant Secure Boot servicing events
+- Windows build, UBR/revision, edition, architecture and system locale
+
+These checks exist because recovery/encryption/firmware state changes the risk of any deeper maintenance operation. The suite reports unsafe or incomplete states but does not change them automatically.
+
+In 2026, Secure Boot certificate migration is a real fleet-maintenance consideration. The suite treats related status/events as an administrator/OEM review item, not as permission to modify firmware or Secure Boot variables.
 
 ## Disk-space strategy
 
@@ -74,11 +96,15 @@ The analysis reports:
 - stale files under approved temporary folders
 - Windows temporary folder usage
 - Windows Update download-cache footprint
+- Delivery Optimization cache footprint
 - Windows Error Reporting footprint
+- minidump footprint
+- CBS/DISM log footprint
 - `Windows.old` footprint when present
 - component-store analysis through DISM
+- large system files such as hibernation, pagefile, swapfile and memory dump for information only
 
-Automatic cleanup is intentionally narrower than the analysis.
+Automatic cleanup is intentionally narrower than the analysis. Hibernation, paging, swap and dump files are not automatically deleted merely because they are large.
 
 ### Safe stale-temp cleanup
 
@@ -107,23 +133,44 @@ The safe order is:
 3. repair only when explicitly selected and a suitable local repair source exists
 4. System File Checker repair after the component store is suitable
 
+Before any selected repair action, Windows Care attempts to create a System Restore checkpoint when the operating system and policy allow it. Failure to create a restore point is recorded; the suite does not weaken policy to force one.
+
 ### Offline-only repair source
 
-The suite supports exact-build local Windows repair sources under:
+Repair media is prepared on the connected builder using:
 
-```text
-payload/windows-repair/<WINDOWS_BUILD>/Windows/
+```powershell
+scripts\Prepare-WindowsRepairSource.ps1 -SourceWindowsPath <expanded Windows directory>
 ```
 
-The target repair command uses `/LimitAccess`, preventing DISM from falling back to Windows Update.
+For a running reference Windows installation, build, UBR/revision, architecture and system language can be captured automatically. Mounted/offline sources require explicit metadata.
 
-Builder-side optional source layout:
+Builder-side source profiles use:
 
 ```text
-native-source/windows-repair/<WINDOWS_BUILD>/Windows/
+native-source/windows-repair/<PROFILE_ID>/
+  source-metadata.json
+  Windows/
 ```
 
-A repair source should match the target Windows version/build, architecture, language and servicing level closely enough to satisfy Windows servicing requirements. A missing or mismatched source causes the action to be skipped/reported, not replaced by an internet download.
+The final bundle preserves the same verified profile structure:
+
+```text
+payload/windows-repair/<PROFILE_ID>/
+  source-metadata.json
+  Windows/
+```
+
+Target repair is permitted only when metadata matches:
+
+- Windows build
+- UBR/revision
+- architecture
+- target system locale/language
+
+The target DISM command uses `/LimitAccess`, preventing fallback to Windows Update. A missing or mismatched source causes the action to be skipped and reported instead of silently using the network or an older source.
+
+The repair-source policy is intentionally stricter than "same Windows version" because a target patched beyond the source can fail servicing.
 
 ## Windows Update repair
 
@@ -137,6 +184,22 @@ The normal diagnostic checks:
 The optional update-cache rebuild is intentionally reversible at first. It stops the relevant services, renames `SoftwareDistribution` and `catroot2` to timestamped backup names, and restarts services. It does not immediately delete the backup directories.
 
 If Windows already has a pending restart, the update-cache rebuild is skipped until after restart.
+
+## Core-service readiness
+
+Windows Care also checks services and state that commonly break installation or authentication workflows:
+
+- Windows Installer service and `msiexec.exe`
+- in-progress installer transaction marker
+- Windows Time service and synchronization query
+- VSS writer/snapshot health
+- PowerShell execution policy/language mode
+- application-control state
+- proxy configuration
+- conflicting Python/PATH state
+- legacy .NET Framework readiness
+
+These are diagnostic by default. The suite does not restart/reconfigure critical services just because their state looks unusual.
 
 ## Storage and file-system health
 
@@ -166,7 +229,7 @@ The Device Details tab creates a structured JSON inventory and exposes subviews 
 - Problems & Events
 - Updates & Services
 
-The inventory includes hardware, BIOS, CPU, memory, GPU, volumes, physical disk health, network adapters, IP addresses, gateways, DNS servers, Windows security state, hotfixes, device problems, startup entries, automatic services that are not running, and recent critical/error events.
+The inventory includes hardware, BIOS, CPU, memory, GPU, partitions, volumes, physical disk health, network adapters, IP addresses, gateways, DNS servers, Windows security state, BitLocker, TPM, Secure Boot servicing state, Windows RE information, hotfixes, device problems, startup entries, automatic services that are not running, and recent critical/error events.
 
 ## Windows lifecycle advisory
 
@@ -192,7 +255,7 @@ Every Windows Care run creates:
 - timestamps
 - evidence paths
 
-Update-cache repair preserves timestamped backups. Environment/path changes made by the development installer retain their own backups and state files.
+Selected repairs attempt a restore point first where supported. Update-cache repair preserves timestamped backups. Environment/path changes made by the development installer retain their own backups and state files.
 
 ## Microsoft/official references used by the design
 
@@ -200,6 +263,9 @@ Update-cache repair preserves timestamped backups. Environment/path changes made
 - Repair a Windows image with DISM and `/LimitAccess`: https://learn.microsoft.com/windows-hardware/manufacture/desktop/repair-a-windows-image
 - Storage reliability counters: https://learn.microsoft.com/powershell/module/storage/get-storagereliabilitycounter
 - PnPUtil device enumeration: https://learn.microsoft.com/windows-hardware/drivers/devtest/pnputil-command-syntax
+- Windows Recovery Environment command-line reference: https://learn.microsoft.com/windows-hardware/manufacture/desktop/reagentc-command-line-options
+- BitLocker PowerShell reference: https://learn.microsoft.com/powershell/module/bitlocker/get-bitlockervolume
+- Secure Boot certificate expiration and CA updates: https://support.microsoft.com/topic/windows-devices-for-businesses-and-organizations-with-it-managed-updates-need-to-receive-new-secure-boot-certificates-by-june-2026-a26d3cd9-5d5c-4a25-9bb5-2f91420ad8d7
 - Windows 10 lifecycle: https://learn.microsoft.com/lifecycle/announcements/windows-10-22h2-end-of-support-update
 - Windows 11 release information: https://learn.microsoft.com/windows/release-health/windows11-release-information
 - Claude Code Windows setup: https://docs.anthropic.com/en/docs/claude-code/getting-started
