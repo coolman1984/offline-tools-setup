@@ -1,6 +1,7 @@
 param(
     [string]$InstallRoot = 'C:\OfflineTools',
-    [string]$BundleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    [string]$BundleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
+    [switch]$InstallAiTools
 )
 
 Set-StrictMode -Version Latest
@@ -16,8 +17,9 @@ function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor C
 function Add-MachinePath([string]$PathToAdd) {
     if (-not (Test-Path $PathToAdd)) { return }
     $Current = [Environment]::GetEnvironmentVariable('Path','Machine')
+    if (-not $Current) { $Current = '' }
     if (($Current -split ';') -notcontains $PathToAdd) {
-        [Environment]::SetEnvironmentVariable('Path', ($Current.TrimEnd(';') + ';' + $PathToAdd), 'Machine')
+        [Environment]::SetEnvironmentVariable('Path', ($Current.TrimEnd(';') + ';' + $PathToAdd).TrimStart(';'), 'Machine')
     }
 }
 
@@ -33,7 +35,7 @@ if (-not (Test-Path $Pwsh)) { throw 'PowerShell 7 executable was not found.' }
 Add-MachinePath $PsRoot
 [Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT','1','Machine')
 
-Write-Step 'Installing portable VS Code with pre-bundled extensions'
+Write-Step 'Installing portable VS Code with selected pre-bundled extensions'
 $VsCodeSource = Join-Path $Payload 'vscode'
 $VsCodeRoot = Join-Path $DevRoot 'VSCode'
 Remove-Item $VsCodeRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -42,8 +44,14 @@ $PortableData = Join-Path $VsCodeRoot 'data'
 $ExtensionRoot = Join-Path $PortableData 'extensions'
 $SettingsDir = Join-Path $PortableData 'user-data\User'
 New-Item -ItemType Directory -Force -Path $ExtensionRoot,$SettingsDir | Out-Null
-$ExtensionSource = Join-Path $Payload 'vscode-extensions'
-if (Test-Path $ExtensionSource) { Copy-Item (Join-Path $ExtensionSource '*') $ExtensionRoot -Recurse -Force }
+
+$CoreExtensionSource = Join-Path $Payload 'vscode-extensions-core'
+if (Test-Path $CoreExtensionSource) { Copy-Item (Join-Path $CoreExtensionSource '*') $ExtensionRoot -Recurse -Force }
+if ($InstallAiTools) {
+    $AiExtensionSource = Join-Path $Payload 'vscode-extensions-ai'
+    if (Test-Path $AiExtensionSource) { Copy-Item (Join-Path $AiExtensionSource '*') $ExtensionRoot -Recurse -Force }
+}
+
 $VsSettings = @{
     'update.mode' = 'none'
     'extensions.autoUpdate' = $false
@@ -54,7 +62,6 @@ $VsSettings = @{
     'terminal.integrated.defaultProfile.windows' = 'PowerShell'
 } | ConvertTo-Json -Depth 4
 $VsSettings | Set-Content (Join-Path $SettingsDir 'settings.json') -Encoding UTF8
-$ProfilesDir = Join-Path $SettingsDir
 $CodeCmd = Join-Path $VsCodeRoot 'bin\code.cmd'
 if (-not (Test-Path $CodeCmd)) { throw 'VS Code command not found after copy.' }
 Add-MachinePath (Join-Path $VsCodeRoot 'bin')
@@ -68,11 +75,20 @@ $GitExe = Join-Path $GitCmdDir 'git.exe'
 if (-not (Test-Path $GitExe)) { throw 'Git executable not found.' }
 Add-MachinePath $GitCmdDir
 
-Write-Step 'Installing pre-staged AI and developer CLIs'
-$CliRoot = Join-Path $DevRoot 'CLI'
-Remove-Item $CliRoot -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item (Join-Path $Payload 'cli') $CliRoot -Recurse -Force
-Add-MachinePath $CliRoot
+Write-Step 'Installing core developer CLIs'
+$CoreCliRoot = Join-Path $DevRoot 'CLI-Core'
+Remove-Item $CoreCliRoot -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $Payload 'cli-core') $CoreCliRoot -Recurse -Force
+Add-MachinePath $CoreCliRoot
+
+$AiCliRoot = Join-Path $DevRoot 'CLI-AI'
+if ($InstallAiTools) {
+    Write-Step 'Installing selected AI coding CLIs'
+    Remove-Item $AiCliRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item (Join-Path $Payload 'cli-ai') $AiCliRoot -Recurse -Force
+    Add-MachinePath $AiCliRoot
+}
+
 [Environment]::SetEnvironmentVariable('DISABLE_AUTOUPDATER','1','Machine')
 [Environment]::SetEnvironmentVariable('NO_UPDATE_NOTIFIER','1','Machine')
 [Environment]::SetEnvironmentVariable('npm_config_offline','true','Machine')
@@ -143,11 +159,13 @@ if (-not $ExistingService) {
 }
 Start-Service -Name $ServiceName -ErrorAction SilentlyContinue
 
-Write-Step 'Staging desktop application installers without network downloads'
-$DesktopTarget = Join-Path $DevRoot 'DesktopInstallers'
-New-Item -ItemType Directory -Force -Path $DesktopTarget | Out-Null
-$DesktopSource = Join-Path $Payload 'desktop'
-if (Test-Path $DesktopSource) { Copy-Item (Join-Path $DesktopSource '*') $DesktopTarget -Recurse -Force }
+if ($InstallAiTools) {
+    Write-Step 'Staging approved AI desktop application payloads'
+    $DesktopTarget = Join-Path $DevRoot 'DesktopInstallers'
+    New-Item -ItemType Directory -Force -Path $DesktopTarget | Out-Null
+    $DesktopSource = Join-Path $Payload 'desktop'
+    if (Test-Path $DesktopSource) { Copy-Item (Join-Path $DesktopSource '*') $DesktopTarget -Recurse -Force }
+}
 
 Write-Step 'Creating local launchers'
 $Launchers = Join-Path $InstallRoot 'bin'
@@ -162,12 +180,19 @@ Write-Step 'Developer stack smoke tests'
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 smoke test failed.' }
 & $GitExe --version
 if ($LASTEXITCODE -ne 0) { throw 'Git smoke test failed.' }
-foreach ($Command in @('codex.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
-    $Path = Join-Path $CliRoot $Command
-    if (-not (Test-Path $Path)) { throw "Missing AI CLI launcher: $Command" }
+foreach ($Command in @('pnpm.cmd','yarn.cmd','tsc.cmd')) {
+    $Path = Join-Path $CoreCliRoot $Command
+    if (-not (Test-Path $Path)) { throw "Missing core developer CLI launcher: $Command" }
+}
+if ($InstallAiTools) {
+    foreach ($Command in @('codex.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
+        $Path = Join-Path $AiCliRoot $Command
+        if (-not (Test-Path $Path)) { throw "Missing AI CLI launcher: $Command" }
+    }
 }
 
 Write-Host '`nWINDOWS-NATIVE DEVELOPER STACK INSTALLED.' -ForegroundColor Green
 Write-Host 'Shells: PowerShell 7 / Windows PowerShell / Command Prompt. Bash and WSL are not required.' -ForegroundColor Green
+if ($InstallAiTools) { Write-Host 'Selected AI coding tools were installed from the local payload.' -ForegroundColor Green }
 Write-Host 'Claude Code is not included in the guaranteed profile because its official Windows runtime currently requires Git Bash or WSL.' -ForegroundColor Yellow
-Write-Host 'No models were installed. No package or extension downloads are required on the target PC.' -ForegroundColor Green
+Write-Host 'No local generative AI models were installed. No package or extension downloads are required on the target PC.' -ForegroundColor Green
