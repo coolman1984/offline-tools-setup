@@ -80,12 +80,13 @@ Remove-Item $HeaderPayload -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $HeaderPayload | Out-Null
 Copy-Item (Join-Path $HeaderTop.FullName '*') $HeaderPayload -Recurse -Force
 
-Write-Step 'Adding optional approved native media when supplied'
+Write-Step 'Adding optional approved native and Windows repair media when supplied'
 $SqlIncluded = $false
 $TesseractIncluded = $false
 $BuildToolsIncluded = $false
 $WebView2Included = $false
 $NetFx35SourceIncluded = $false
+$WindowsRepairBuilds = @()
 
 $SqlSource = Join-Path $NativeSourceDir 'sql-server-express'
 $SqlDestination = Join-Path $OutputDir ([string]$Manifest.microsoft.sqlServerExpress.offlineMediaRelativePath)
@@ -132,24 +133,47 @@ if (Test-Path $NetFxSource) {
     $NetFx35SourceIncluded = $true
 }
 
+# Optional Windows repair sources are deliberately keyed by exact Windows build.
+# Expected builder layout: native-source\windows-repair\<build>\Windows\...
+$WindowsRepairSource = Join-Path $NativeSourceDir 'windows-repair'
+$WindowsRepairDestination = Join-Path $OutputDir 'payload\windows-repair'
+if (Test-Path $WindowsRepairSource) {
+    New-Item -ItemType Directory -Force -Path $WindowsRepairDestination | Out-Null
+    foreach ($buildDir in Get-ChildItem $WindowsRepairSource -Directory -ErrorAction SilentlyContinue) {
+        $windowsDir = Join-Path $buildDir.FullName 'Windows'
+        if (-not (Test-Path (Join-Path $windowsDir 'System32'))) {
+            Write-Warning "Skipping Windows repair source without an expanded Windows\System32 tree: $($buildDir.FullName)"
+            continue
+        }
+        $target = Join-Path $WindowsRepairDestination $buildDir.Name
+        Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $target | Out-Null
+        Copy-Item $windowsDir (Join-Path $target 'Windows') -Recurse -Force
+        $WindowsRepairBuilds += $buildDir.Name
+        Write-Host "Included exact-build Windows repair source: $($buildDir.Name)" -ForegroundColor Green
+    }
+}
+
 Write-Step 'Building the complete offline developer stack'
 & (Join-Path $PSScriptRoot 'Build-DeveloperStack.ps1') -BundleRoot $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "Developer stack builder failed with exit code $LASTEXITCODE" }
 
-Write-Step 'Copying profile definitions and profile-aware installer scripts'
+Write-Step 'Copying profile definitions, Windows Care policy and target scripts'
 New-Item -ItemType Directory -Force -Path (Join-Path $OutputDir 'config'),(Join-Path $OutputDir 'requirements\profiles'),(Join-Path $OutputDir 'scripts') | Out-Null
 Copy-Item (Join-Path $RepoRoot 'config\setup-profiles.json') (Join-Path $OutputDir 'config\setup-profiles.json') -Force
+Copy-Item (Join-Path $RepoRoot 'config\windows-care.json') (Join-Path $OutputDir 'config\windows-care.json') -Force
 Copy-Item (Join-Path $RepoRoot 'requirements\profiles\*.txt') (Join-Path $OutputDir 'requirements\profiles') -Force
 foreach ($scriptName in @(
     'Install-NativeComponents.ps1','Install-AllOfflineTools.ps1','Install-DeveloperStack.ps1','Install-SelectedProfiles.ps1',
-    'Invoke-EnvironmentHardening.ps1','Publish-ManagedLaunchers.ps1','Install-NativeBuildTools.ps1'
+    'Invoke-EnvironmentHardening.ps1','Publish-ManagedLaunchers.ps1','Install-NativeBuildTools.ps1',
+    'Get-DeviceInventory.ps1','Invoke-SafeWindowsCare.ps1','Test-OfficeAutomationHealth.ps1','Test-LegacyWindowsRuntimeReadiness.ps1'
 )) {
     $source = Join-Path $RepoRoot ('scripts\' + $scriptName)
     if (Test-Path $source) { Copy-Item $source (Join-Path $OutputDir ('scripts\' + $scriptName)) -Force }
 }
 Copy-Item (Join-Path $RepoRoot 'START-HERE.cmd') (Join-Path $OutputDir 'START-HERE.cmd') -Force
 
-Write-Step 'Building self-contained professional setup interface'
+Write-Step 'Building self-contained professional setup and tabbed suite interfaces'
 & (Join-Path $PSScriptRoot 'Build-SetupUi.ps1') -BundleRoot $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "Setup UI builder failed with exit code $LASTEXITCODE" }
 
@@ -164,8 +188,13 @@ $NativeStatus = [pscustomobject]@{
     visualStudioBuildToolsMedia = $BuildToolsIncluded
     webView2 = $WebView2Included
     netFramework35MatchingWindowsMedia = $NetFx35SourceIncluded
+    windowsRepairBuilds = @($WindowsRepairBuilds)
     developerStack = $true
     professionalSetupUi = $true
+    tabbedSuiteShell = $true
+    windowsSafeCare = $true
+    deviceInventory = $true
+    portableGitBashFallback = $true
     targetDownloadsAllowed = $false
     aiServiceNetworkOnly = $true
     localGenerativeAiModels = $false
@@ -197,3 +226,4 @@ if ($CreateZip) {
 
 Write-Host "`nComplete professional offline bundle ready: $OutputDir" -ForegroundColor Green
 Write-Host 'Target installation performs zero software/package/extension downloads.' -ForegroundColor Green
+Write-Host 'Windows repair operations use only exact-build local repair media when supplied.' -ForegroundColor Green
