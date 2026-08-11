@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+flask
+django
+jinja2
+websockets
+aiofiles
+python-multipart
