@@ -1,0 +1,91 @@
+name: Installer UI CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'installer-ui/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'requirements/profiles/**'
+      - 'START-HERE.cmd'
+      - '.github/workflows/installer-ui-ci.yml'
+  pull_request:
+    paths:
+      - 'installer-ui/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'requirements/profiles/**'
+      - 'START-HERE.cmd'
+      - '.github/workflows/installer-ui-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  validate-windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore UI
+        run: dotnet restore installer-ui/OfflineToolsSetup.csproj
+
+      - name: Build UI
+        run: dotnet build installer-ui/OfflineToolsSetup.csproj -c Release --no-restore
+
+      - name: Publish self-contained UI
+        run: dotnet publish installer-ui/OfflineToolsSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/setup-ui
+
+      - name: Validate JSON and PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Get-Content config/setup-profiles.json -Raw | ConvertFrom-Json | Out-Null
+          Get-Content config/developer-stack.json -Raw | ConvertFrom-Json | Out-Null
+          Get-Content config/tool-manifest.json -Raw | ConvertFrom-Json | Out-Null
+
+          $allErrors = @()
+          foreach ($file in Get-ChildItem scripts -Filter '*.ps1' -File) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$tokens,
+              [ref]$parseErrors
+            ) | Out-Null
+
+            if ($parseErrors.Count -gt 0) {
+              foreach ($err in $parseErrors) {
+                $allErrors += "${($file.Name)}:$($err.Extent.StartLineNumber): $($err.Message)"
+              }
+            }
+          }
+
+          if ($allErrors.Count -gt 0) {
+            $allErrors | ForEach-Object { Write-Error $_ }
+            throw 'PowerShell syntax validation failed.'
+          }
+
+      - name: Verify published executable
+        shell: pwsh
+        run: |
+          $exe = 'artifacts/setup-ui/OfflineToolsSetup.exe'
+          if (-not (Test-Path $exe)) { throw "Missing published executable: $exe" }
+          $size = (Get-Item $exe).Length
+          if ($size -lt 1MB) { throw "Published executable is unexpectedly small: $size bytes" }
+          Write-Host "Published setup UI size: $([Math]::Round($size / 1MB, 1)) MB"
+
+      - name: Upload setup UI test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OfflineToolsSetup-win-x64
+          path: artifacts/setup-ui/OfflineToolsSetup.exe
+          if-no-files-found: error
