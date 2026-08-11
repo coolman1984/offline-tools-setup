@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "policy": {
     "targetInternetMode": "ai-services-only",
     "targetDownloadsAllowed": false,
@@ -7,9 +7,12 @@
     "targetPackageRegistryAllowed": false,
     "targetSelfUpdatesAllowed": false,
     "localModelsAllowed": false,
-    "bashAllowed": false,
+    "bashAllowed": true,
+    "bashRequired": false,
+    "bashDefaultShell": false,
+    "bashFallbackBundled": true,
     "wslAllowed": false,
-    "allowedShells": ["powershell7", "windows-powershell", "cmd"],
+    "allowedShells": ["powershell7", "windows-powershell", "cmd", "git-bash-fallback"],
     "allInstallArtifactsMustBePrebundled": true,
     "disableTlsVerificationAllowed": false,
     "useWindowsCertificateStoreForNode": true
@@ -32,7 +35,10 @@
       "architecture": "x64",
       "releaseApi": "https://api.github.com/repos/git-for-windows/git/releases/latest",
       "assetRegex": "^MinGit-.*-64-bit\\.zip$",
-      "bashRequired": false
+      "bashRequired": false,
+      "portableBashAssetRegex": "^PortableGit-.*-64-bit\\.7z\\.exe$",
+      "portableBash": true,
+      "portableBashPurpose": "Isolated compatibility fallback for tools that explicitly require Git Bash. It is never the default shell and is not placed directly on machine PATH."
     },
     "gitea": {
       "version": "1.27.0",
@@ -47,22 +53,16 @@
   },
   "aiCli": [
     { "name": "Codex CLI", "package": "@openai/codex", "command": "codex", "supported": true },
+    { "name": "Claude Code CLI", "package": "@anthropic-ai/claude-code", "command": "claude", "supported": true, "requiresGitBash": true },
     { "name": "Cline CLI", "package": "cline", "command": "cline", "supported": true },
     { "name": "Kilo CLI", "package": "@kilocode/cli", "command": "kilo", "supported": true },
     { "name": "OpenCode CLI", "package": "opencode-ai", "command": "opencode", "supported": true }
   ],
-  "blockedByCorporateShellPolicy": [
+  "conditionalShellTools": [
     {
-      "name": "Claude Code CLI",
-      "package": "@anthropic-ai/claude-code",
-      "reason": "Anthropic currently requires Git Bash for native Windows or WSL. Both are unavailable on target PCs.",
-      "install": false
-    },
-    {
-      "name": "Claude Code VS Code extension",
-      "extension": "anthropic.claude-code",
-      "reason": "Kept out of the guaranteed profile because the supported Windows Claude Code runtime path requires Git Bash or WSL.",
-      "install": false
+      "name": "Claude Code",
+      "condition": "Portable Git Bash must be allowed to execute by corporate application-control policy.",
+      "fallbackBehavior": "If Bash execution is blocked, Claude Code is marked unavailable while the rest of the suite remains operational."
     }
   ],
   "nodeCli": [
@@ -87,6 +87,7 @@
   ],
   "vscodeExtensionsAi": [
     "OpenAI.chatgpt",
+    "anthropic.claude-code",
     "saoudrizwan.claude-dev",
     "kilocode.Kilo-Code",
     "sst-dev.opencode"
