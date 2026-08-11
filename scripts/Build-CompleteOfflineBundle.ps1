@@ -71,14 +71,19 @@ if (Test-Path $TesseractSource) {
     Get-RemoteFile 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/eng.traineddata' (Join-Path $TessdataDir 'eng.traineddata')
     Get-RemoteFile 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/ara.traineddata' (Join-Path $TessdataDir 'ara.traineddata')
     $TesseractIncluded = $true
-    Write-Host 'Tesseract OCR installer and English/Arabic models included.' -ForegroundColor Green
+    Write-Host 'Tesseract OCR installer and English/Arabic data included.' -ForegroundColor Green
 } else {
     Write-Warning 'Tesseract Windows installer not supplied. RapidOCR remains available as the built-in OCR baseline.'
 }
 
+Write-Step 'Building the complete offline developer and AI-agent stack'
+& (Join-Path $PSScriptRoot 'Build-DeveloperStack.ps1') -BundleRoot $OutputDir
+if ($LASTEXITCODE -ne 0) { throw "Developer stack builder failed with exit code $LASTEXITCODE" }
+
 Write-Step 'Copying complete target installer scripts'
 Copy-Item (Join-Path $RepoRoot 'scripts\Install-NativeComponents.ps1') (Join-Path $OutputDir 'scripts\Install-NativeComponents.ps1') -Force
 Copy-Item (Join-Path $RepoRoot 'scripts\Install-AllOfflineTools.ps1') (Join-Path $OutputDir 'scripts\Install-AllOfflineTools.ps1') -Force
+Copy-Item (Join-Path $RepoRoot 'scripts\Install-DeveloperStack.ps1') (Join-Path $OutputDir 'scripts\Install-DeveloperStack.ps1') -Force
 Copy-Item (Join-Path $RepoRoot 'START-HERE.cmd') (Join-Path $OutputDir 'START-HERE.cmd') -Force
 
 $NativeStatus = [pscustomobject]@{
@@ -86,10 +91,14 @@ $NativeStatus = [pscustomobject]@{
     sqlOdbc = $true
     sqlServerExpressMedia = $SqlIncluded
     tesseract = $TesseractIncluded
+    developerStack = $true
+    targetDownloadsAllowed = $false
+    aiServiceNetworkOnly = $true
+    localModels = $false
 }
 $NativeStatus | ConvertTo-Json | Set-Content (Join-Path $OutputDir 'native-components.json') -Encoding UTF8
 
-Write-Step 'Rebuilding final SHA-256 manifest after native payload additions'
+Write-Step 'Rebuilding final SHA-256 manifest after all payload additions'
 $HashEntries = Get-ChildItem $OutputDir -File -Recurse | Where-Object { $_.Name -ne 'bundle-sha256.json' } | ForEach-Object {
     [pscustomobject]@{
         path = Get-RelativeBundlePath $OutputDir $_.FullName
@@ -108,4 +117,4 @@ if ($CreateZip) {
 }
 
 Write-Host "`nComplete offline bundle ready: $OutputDir" -ForegroundColor Green
-Write-Host 'Target machines do not need internet access.' -ForegroundColor Green
+Write-Host 'Target installation needs zero downloads. Network may be used only later by approved AI services.' -ForegroundColor Green
