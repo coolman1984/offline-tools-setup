@@ -58,6 +58,11 @@ Built-in checks include:
 
 - disk-space/candidate analysis
 - pending restart detection
+- Windows Installer health
+- Windows time/synchronization health
+- Windows runtime and recovery readiness
+- WinRE, BitLocker, TPM and Secure Boot servicing state
+- development environment/PATH/policy readiness
 - DISM component-store checks
 - SFC verify-only
 - online CHKDSK scan
@@ -65,6 +70,7 @@ Built-in checks include:
 - Plug and Play device problems
 - critical/error event summaries
 - Windows Update health
+- VSS health
 - power/battery diagnostics
 
 Optional safe repairs include:
@@ -72,11 +78,13 @@ Optional safe repairs include:
 - stale temporary-file cleanup from approved temp folders only
 - Delivery Optimization cache cleanup using the Windows command
 - supported DISM component cleanup without ResetBase
-- Windows image repair only from a matching pre-bundled local source with network fallback disabled
+- Windows image repair only from a metadata-verified matching pre-bundled local source with network fallback disabled
 - SFC repair
 - reversible-first Windows Update working-cache rebuild
 
-Permanent guardrails prohibit user-folder deletion, registry cleaners, manual WinSxS deletion, Windows Installer cache deletion, boot configuration changes, security-control bypass, automatic driver replacement/removal, DISM ResetBase and automatic offline CHKDSK repair scheduling.
+Selected repairs attempt a Windows restore point first where the feature and policy allow it.
+
+Permanent guardrails prohibit user-folder deletion, registry cleaners, manual WinSxS deletion, Windows Installer cache deletion, boot/WinRE/BitLocker/Secure Boot changes, security-control bypass, automatic driver replacement/removal, DISM ResetBase and automatic offline CHKDSK repair scheduling.
 
 See `docs/WINDOWS-SAFE-CARE.md`.
 
@@ -91,7 +99,9 @@ Read-only device intelligence subviews:
 - Problems & Events
 - Updates & Services
 
-The suite also writes a structured inventory to:
+The structured inventory includes hardware, BIOS, CPU, memory, GPU, disks/partitions, disk reliability counters, IP addresses, gateways, DNS, Windows version/build/revision, BitLocker, TPM, Secure Boot servicing state, WinRE information, updates, device problems, startup items, services, policy and recent critical events.
+
+The suite also writes the full inventory to:
 
 ```text
 C:\OfflineTools\state\device-inventory.json
@@ -193,19 +203,29 @@ The builder prepares runtimes, package stores, VS Code extensions, AI/developer 
 
 Optional approved native media is supplied under `native-source/` before building.
 
-Optional exact-build Windows repair source layout:
+Optional Windows repair sources should first be prepared with:
 
-```text
-native-source/windows-repair/<WINDOWS_BUILD>/Windows/
+```powershell
+scripts\Prepare-WindowsRepairSource.ps1 -SourceWindowsPath <expanded Windows directory>
 ```
 
-The builder transports those sources as:
+Prepared builder profiles use:
 
 ```text
-payload/windows-repair/<WINDOWS_BUILD>/Windows/
+native-source/windows-repair/<PROFILE_ID>/
+  source-metadata.json
+  Windows/
 ```
 
-Windows Care uses them only for matching-build local DISM repair and explicitly disables Windows Update fallback.
+The final bundle preserves them under:
+
+```text
+payload/windows-repair/<PROFILE_ID>/
+  source-metadata.json
+  Windows/
+```
+
+Windows Care permits local DISM repair only when source metadata matches the target build, UBR/revision, architecture and system language; `/LimitAccess` disables Windows Update fallback.
 
 ## Reliability model
 
@@ -223,7 +243,9 @@ The suite uses:
 - profile-specific smoke tests
 - bounded Office COM validation
 - conservative Windows Care guardrails
-- evidence-first repairs
+- read-only recovery/encryption/boot readiness diagnostics
+- restore-point attempt before selected repairs
+- evidence-first and reversible-first maintenance
 - checkpoint state under `C:\OfflineTools\state`
 - logs under `C:\OfflineTools\logs`
 - plans under `%ProgramData%\OfflineToolsSetup\plans`
