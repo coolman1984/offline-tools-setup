@@ -1,0 +1,3 @@
+# Optional large OCR stack. Build separately because compatibility and download size vary by Python version.
+easyocr
+paddleocr
