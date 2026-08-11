@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "ui": {
     "productName": "Offline Automation & Development Suite",
     "subtitle": "Professional Windows 10/11 workstation setup",
@@ -13,10 +13,11 @@
     "displayName": "Core Foundation",
     "locked": true,
     "description": "Always installed. Provides the common runtime, editor, Git, database connectivity, and offline package foundation used by every profile.",
-    "estimatedMb": 4200,
+    "estimatedMb": 4400,
     "pythonRequirementProfiles": ["core"],
     "components": [
-      { "id": "vc-runtime", "name": "Microsoft Visual C++ Runtime", "required": true },
+      { "id": "vc-runtime-x64", "name": "Microsoft Visual C++ Runtime x64", "required": true },
+      { "id": "vc-runtime-x86", "name": "Microsoft Visual C++ Runtime x86", "required": true },
       { "id": "powershell7", "name": "PowerShell 7", "required": true },
       { "id": "mingit", "name": "MinGit", "required": true },
       { "id": "vscode", "name": "Visual Studio Code Portable", "required": true },
@@ -24,7 +25,8 @@
       { "id": "node-lts", "name": "Node.js LTS", "required": true },
       { "id": "offline-package-cache", "name": "Offline Python and Node package stores", "required": true },
       { "id": "sql-odbc", "name": "Microsoft SQL Server ODBC Driver", "required": true },
-      { "id": "gitea", "name": "Local Gitea Development Hub", "required": true }
+      { "id": "gitea", "name": "Local Gitea Development Hub", "required": true },
+      { "id": "environment-hardening", "name": "Windows environment compatibility and PATH hardening", "required": true }
     ]
   },
   "profiles": [
@@ -104,11 +106,27 @@
       ]
     },
     {
+      "id": "native-build",
+      "displayName": "Native Build Toolchain",
+      "description": "Offline compilers and SDKs required by Python/Node native packages and Windows development.",
+      "recommended": false,
+      "estimatedMb": 8500,
+      "pythonRequirementProfiles": [],
+      "components": [
+        { "id": "dotnet-sdk-10", "name": ".NET 10 LTS SDK", "selectedByDefault": true, "nativeOptional": true },
+        { "id": "msvc-build-tools", "name": "Microsoft C/C++ Build Tools", "selectedByDefault": true, "nativeOptional": true },
+        { "id": "windows-sdk", "name": "Windows SDK", "selectedByDefault": true, "nativeOptional": true },
+        { "id": "cmake", "name": "CMake tooling from Build Tools workload", "selectedByDefault": true, "nativeOptional": true },
+        { "id": "node-gyp", "name": "Node native addon build tooling", "selectedByDefault": true },
+        { "id": "node-headers", "name": "Local Node.js headers", "selectedByDefault": true }
+      ]
+    },
+    {
       "id": "ai-dev",
       "displayName": "AI Coding Tools",
       "description": "Pre-bundled Windows-compatible coding agents and VS Code extensions. Network is used only for approved AI service access.",
       "recommended": false,
-      "estimatedMb": 1600,
+      "estimatedMb": 1900,
       "pythonRequirementProfiles": [],
       "components": [
         { "id": "codex", "name": "Codex", "selectedByDefault": true },
@@ -116,6 +134,7 @@
         { "id": "kilo", "name": "Kilo Code", "selectedByDefault": true },
         { "id": "opencode", "name": "OpenCode", "selectedByDefault": true },
         { "id": "opencode-desktop", "name": "OpenCode Desktop", "selectedByDefault": true },
+        { "id": "webview2", "name": "Microsoft WebView2 offline runtime", "selectedByDefault": true, "nativeOptional": true },
         { "id": "claude-code", "name": "Claude Code", "selectedByDefault": false, "supported": false, "reason": "Official Windows runtime currently requires Git Bash or WSL; both are forbidden on target PCs." }
       ]
     },
@@ -137,7 +156,7 @@
   "presets": [
     { "id": "recommended", "displayName": "Recommended Professional Setup", "profiles": ["office", "pdf", "data-db", "web", "quality"] },
     { "id": "automation", "displayName": "Automation & Office Workstation", "profiles": ["office", "pdf", "data-db", "quality"] },
-    { "id": "webdev", "displayName": "Full-Stack Development Workstation", "profiles": ["web", "data-db", "quality"] },
-    { "id": "complete", "displayName": "Complete Workstation", "profiles": ["office", "pdf", "ocr", "data-db", "web", "ai-dev", "quality"] }
+    { "id": "webdev", "displayName": "Full-Stack Development Workstation", "profiles": ["web", "native-build", "data-db", "quality"] },
+    { "id": "complete", "displayName": "Complete Workstation", "profiles": ["office", "pdf", "ocr", "data-db", "web", "native-build", "ai-dev", "quality"] }
   ]
 }
