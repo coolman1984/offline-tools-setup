@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "policy": {
     "targetInternetMode": "ai-services-only",
     "targetDownloadsAllowed": false,
@@ -7,6 +7,9 @@
     "targetPackageRegistryAllowed": false,
     "targetSelfUpdatesAllowed": false,
     "localModelsAllowed": false,
+    "bashAllowed": false,
+    "wslAllowed": false,
+    "allowedShells": ["powershell7", "windows-powershell", "cmd"],
     "allInstallArtifactsMustBePrebundled": true
   },
   "core": {
@@ -16,11 +19,18 @@
       "archiveUrl": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
       "portable": true
     },
+    "powershell": {
+      "distribution": "PowerShell 7",
+      "releaseApi": "https://api.github.com/repos/PowerShell/PowerShell/releases/latest",
+      "assetRegex": "^PowerShell-[0-9.]+-win-x64\\.zip$",
+      "portable": true
+    },
     "git": {
-      "distribution": "Git for Windows",
+      "distribution": "MinGit for Windows",
       "architecture": "x64",
-      "portablePreferred": true,
-      "releaseApi": "https://api.github.com/repos/git-for-windows/git/releases/latest"
+      "releaseApi": "https://api.github.com/repos/git-for-windows/git/releases/latest",
+      "assetRegex": "^MinGit-.*-64-bit\\.zip$",
+      "bashRequired": false
     },
     "gitea": {
       "version": "1.27.0",
@@ -33,11 +43,24 @@
     }
   },
   "aiCli": [
-    { "name": "Codex CLI", "package": "@openai/codex", "command": "codex" },
-    { "name": "Claude Code", "package": "@anthropic-ai/claude-code", "command": "claude" },
-    { "name": "Cline CLI", "package": "cline", "command": "cline" },
-    { "name": "Kilo CLI", "package": "@kilocode/cli", "command": "kilo" },
-    { "name": "OpenCode CLI", "package": "opencode-ai", "command": "opencode" }
+    { "name": "Codex CLI", "package": "@openai/codex", "command": "codex", "supported": true },
+    { "name": "Cline CLI", "package": "cline", "command": "cline", "supported": true },
+    { "name": "Kilo CLI", "package": "@kilocode/cli", "command": "kilo", "supported": true },
+    { "name": "OpenCode CLI", "package": "opencode-ai", "command": "opencode", "supported": true }
+  ],
+  "blockedByCorporateShellPolicy": [
+    {
+      "name": "Claude Code CLI",
+      "package": "@anthropic-ai/claude-code",
+      "reason": "Anthropic currently requires Git Bash for native Windows or WSL. Both are unavailable on target PCs.",
+      "install": false
+    },
+    {
+      "name": "Claude Code VS Code extension",
+      "extension": "anthropic.claude-code",
+      "reason": "Kept out of the guaranteed profile because the supported Windows Claude Code runtime path requires Git Bash or WSL.",
+      "install": false
+    }
   ],
   "nodeCli": [
     "pnpm",
@@ -50,7 +73,6 @@
   ],
   "vscodeExtensions": [
     "OpenAI.chatgpt",
-    "anthropic.claude-code",
     "saoudrizwan.claude-dev",
     "kilocode.Kilo-Code",
     "sst-dev.opencode",
@@ -75,15 +97,13 @@
       "name": "ChatGPT Desktop with Codex",
       "supported": true,
       "source": "enterprise-offline-payload",
-      "payloadPath": "payload/developer/desktop/chatgpt",
-      "note": "Pre-acquire the enterprise/offline Windows package. Target devices must not use Microsoft Store or winget downloads."
+      "payloadPath": "payload/developer/desktop/chatgpt"
     },
     {
       "name": "Claude Desktop",
       "supported": true,
       "source": "offline-payload",
-      "payloadPath": "payload/developer/desktop/claude",
-      "note": "Pre-acquire the Windows installer on the connected build machine and place it in this payload directory."
+      "payloadPath": "payload/developer/desktop/claude"
     },
     {
       "name": "Kilo Desktop",
@@ -93,7 +113,7 @@
     {
       "name": "Cline Desktop",
       "supported": false,
-      "replacement": "Cline VS Code extension, CLI, and local Kanban UI"
+      "replacement": "Cline VS Code extension and CLI"
     }
   ]
 }
