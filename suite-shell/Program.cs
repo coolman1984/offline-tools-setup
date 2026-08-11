@@ -7,7 +7,7 @@ namespace OfflineToolsSuite;
 
 internal static class Program
 {
-    private const string Version = "0.4.0";
+    private const string Version = "0.5.0";
     private static readonly string[] Tabs = { "SETUP", "SAFE REPAIR", "DEVICE DETAILS", "LOGS" };
 
     public static int Main(string[] args)
@@ -70,11 +70,11 @@ internal static class Program
         AnsiConsole.MarkupLine(tabMarkup.ToString());
         AnsiConsole.MarkupLine("[grey]←/→ switch tabs   Enter open   1-4 jump   Esc/Q exit[/]\n");
 
-        IRenderable content = selected switch
+        var content = selected switch
         {
             0 => new Panel(new Markup("[bold cyan]Professional Setup[/]\n\nInstall or repair the managed development workstation: Python versions, Office/PDF automation, databases, full-stack tooling, VS Code, Git, AI coding tools and native build prerequisites.\n\n[green]Existing projects and unrelated software remain isolated from the managed suite.[/]")) { Border = BoxBorder.Rounded, Header = new PanelHeader("  WORKSTATION SETUP  "), Padding = new Padding(2, 1) },
-            1 => new Panel(new Markup($"[bold cyan]{Markup.Escape(care.ProductName)}[/]\n\nRun quick or deep diagnostics, inspect reclaimable disk space, verify Windows integrity, and execute explicitly selected safe repairs.\n\n[red bold]RED LINE:[/] no boot configuration changes, no manual WinSxS deletion, no Windows Installer cache deletion, no driver deletion, no security-policy bypass, and no user Documents/Desktop/Downloads cleanup.")) { Border = BoxBorder.Rounded, Header = new PanelHeader("  SAFE WINDOWS CARE  "), Padding = new Padding(2, 1) },
-            2 => new Panel(new Markup("[bold cyan]Device Details[/]\n\nRead-only hardware and Windows inventory: model, BIOS, CPU, memory, GPU, disks and reliability counters, volumes, IP addresses, gateways, DNS, updates, device problems, security state, startup items, services and recent critical events.\n\n[green]No settings are changed.[/]")) { Border = BoxBorder.Rounded, Header = new PanelHeader("  DEVICE INTELLIGENCE  "), Padding = new Padding(2, 1) },
+            1 => new Panel(new Markup($"[bold cyan]{Markup.Escape(care.ProductName)}[/]\n\nRun quick, deep or complete read-only diagnostics; inspect reclaimable disk space; verify Windows integrity; and execute only explicitly selected safe repairs.\n\n[red bold]RED LINE:[/] no boot configuration changes, no manual WinSxS deletion, no Windows Installer cache deletion, no driver deletion, no security-policy bypass, and no user Documents/Desktop/Downloads cleanup.")) { Border = BoxBorder.Rounded, Header = new PanelHeader("  SAFE WINDOWS CARE  "), Padding = new Padding(2, 1) },
+            2 => new Panel(new Markup("[bold cyan]Device Details[/]\n\nRead-only hardware and Windows inventory with dedicated views for system overview, network/IP, storage health, security, problems and updates.\n\n[green]No settings are changed.[/]")) { Border = BoxBorder.Rounded, Header = new PanelHeader("  DEVICE INTELLIGENCE  "), Padding = new Padding(2, 1) },
             _ => new Panel(new Markup("[bold cyan]Logs & Evidence[/]\n\nReview installer logs, Windows Care results, plans, state files and diagnostic evidence. The suite keeps durable receipts so failures can be understood instead of answered with the traditional Windows ritual of 'try again'.")) { Border = BoxBorder.Rounded, Header = new PanelHeader("  LOGS & EVIDENCE  "), Padding = new Padding(2, 1) }
         };
         AnsiConsole.Write(content);
@@ -101,18 +101,32 @@ internal static class Program
             RenderSectionHeader("SAFE REPAIR", "Diagnostics first. Repairs are explicit and conservative.");
             var choice = AnsiConsole.Prompt(new SelectionPrompt<string>()
                 .Title("[bold cyan]Choose Windows Care mode[/]")
-                .PageSize(8)
+                .PageSize(10)
                 .HighlightStyle(new Style(Color.Black, Color.Cyan1, Decoration.Bold))
-                .AddChoices("Quick Health Check", "Deep Diagnostics  [LONG]", "Custom checks / repairs", "Back"));
+                .AddChoices(
+                    "Quick Health Check",
+                    "Deep Diagnostics  [LONG]",
+                    "All Diagnostics  [LONG / READ ONLY]",
+                    "Custom checks / repairs",
+                    "Back"));
 
             if (choice == "Back") return;
             List<CareAction> actions;
-            if (choice == "Quick Health Check") actions = ActionsForPreset(config, "quick-health");
+            if (choice == "Quick Health Check")
+            {
+                actions = ActionsForPreset(config, "quick-health");
+            }
             else if (choice.StartsWith("Deep Diagnostics", StringComparison.Ordinal))
             {
                 AnsiConsole.MarkupLine("[yellow]Deep diagnostics can take a long time because DISM, SFC verification and storage checks may scan large parts of Windows.[/]");
                 if (!AnsiConsole.Confirm("Run deep read-only diagnostics now?", true)) continue;
                 actions = ActionsForPreset(config, "deep-diagnostics");
+            }
+            else if (choice.StartsWith("All Diagnostics", StringComparison.Ordinal))
+            {
+                AnsiConsole.MarkupLine("[yellow]All diagnostics runs every read-only check, including long DISM/SFC/power checks. It performs no repair or cleanup.[/]");
+                if (!AnsiConsole.Confirm("Run every read-only diagnostic?", true)) continue;
+                actions = ActionsForPreset(config, "all-diagnostics");
             }
             else
             {
@@ -132,7 +146,7 @@ internal static class Program
             var repairs = actions.Where(a => a.Mode == "repair").ToList();
             if (repairs.Count > 0)
             {
-                AnsiConsole.MarkupLine("\n[red bold]Selected actions will change Windows maintenance state.[/] They are designed to be conservative, but they are not read-only diagnostics.");
+                AnsiConsole.MarkupLine("\n[red bold]Selected actions will change Windows maintenance state.[/] They are conservative but are not read-only diagnostics.");
                 if (!AnsiConsole.Confirm("Apply the selected repair actions?", false)) continue;
             }
             else if (!AnsiConsole.Confirm("Run the selected diagnostics?", true)) continue;
@@ -175,15 +189,93 @@ internal static class Program
     private static void RunDeviceDetails(string bundleRoot)
     {
         AnsiConsole.Clear();
-        RenderSectionHeader("DEVICE DETAILS", "Read-only inventory and health evidence.");
+        RenderSectionHeader("DEVICE DETAILS", "Collecting read-only inventory and health evidence.");
         var script = Path.Combine(bundleRoot, "scripts", "Get-DeviceInventory.ps1");
         if (!File.Exists(script)) { ShowError("Device inventory backend is missing.", script); return; }
         var output = @"C:\OfflineTools\state\device-inventory.json";
-        RunConsoleProcess(ResolvePowerShell(bundleRoot), new[] { "-NoLogo", "-NoProfile", "-File", script, "-OutputPath", output }, bundleRoot);
-        AnsiConsole.MarkupLine($"\n[green]Full structured inventory:[/] {Markup.Escape(output)}");
-        var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("\n[bold cyan]Device details[/]").AddChoices("Open full JSON in Notepad", "Back"));
-        if (choice.StartsWith("Open", StringComparison.Ordinal) && File.Exists(output))
-            Process.Start(new ProcessStartInfo("notepad.exe", $"\"{output}\"") { UseShellExecute = true });
+        RunConsoleProcess(ResolvePowerShell(bundleRoot), new[] { "-NoLogo", "-NoProfile", "-File", script, "-OutputPath", output, "-SummaryOnly" }, bundleRoot);
+        if (!File.Exists(output)) { ShowError("Device inventory did not produce its structured output.", output); return; }
+
+        while (true)
+        {
+            AnsiConsole.Clear();
+            RenderSectionHeader("DEVICE DETAILS", "Read-only subviews. Refresh by leaving and reopening this tab.");
+            var choice = AnsiConsole.Prompt(new SelectionPrompt<string>()
+                .Title("[bold cyan]Choose device detail view[/]")
+                .PageSize(12)
+                .HighlightStyle(new Style(Color.Black, Color.Cyan1, Decoration.Bold))
+                .AddChoices(
+                    "Overview",
+                    "Network & IP",
+                    "Storage & Disk Health",
+                    "Security & Policy",
+                    "Problems & Events",
+                    "Updates & Services",
+                    "Open Full JSON",
+                    "Back"));
+            if (choice == "Back") return;
+            if (choice == "Open Full JSON")
+            {
+                Process.Start(new ProcessStartInfo("notepad.exe", $"\"{output}\"") { UseShellExecute = true });
+                continue;
+            }
+            using var doc = JsonDocument.Parse(File.ReadAllText(output));
+            var root = doc.RootElement;
+            switch (choice)
+            {
+                case "Overview":
+                    RenderDeviceSections(root, "OVERVIEW", new[] { "computer", "windows", "bios", "cpu", "memoryModules", "gpu" });
+                    RenderWindowsLifecycleNotice(root);
+                    break;
+                case "Network & IP":
+                    RenderDeviceSections(root, "NETWORK & IP", new[] { "networkAdapters", "network" });
+                    break;
+                case "Storage & Disk Health":
+                    RenderDeviceSections(root, "STORAGE & DISK HEALTH", new[] { "volumes", "disks", "physicalDiskHealth" });
+                    break;
+                case "Security & Policy":
+                    RenderDeviceSections(root, "SECURITY & POLICY", new[] { "security", "environment" });
+                    break;
+                case "Problems & Events":
+                    RenderDeviceSections(root, "PROBLEMS & EVENTS", new[] { "deviceProblems", "recentCriticalAndErrorEvents" });
+                    break;
+                case "Updates & Services":
+                    RenderDeviceSections(root, "UPDATES & SERVICES", new[] { "updates", "autoServicesNotRunning", "startupItems" });
+                    break;
+            }
+            AnsiConsole.MarkupLine("\n[cyan]Press any key to return to Device Details.[/]");
+            Console.ReadKey(true);
+        }
+    }
+
+    private static void RenderDeviceSections(JsonElement root, string title, IEnumerable<string> properties)
+    {
+        AnsiConsole.Clear();
+        RenderSectionHeader(title, "Structured inventory captured locally from Windows.");
+        foreach (var property in properties)
+        {
+            if (!root.TryGetProperty(property, out var value)) continue;
+            var formatted = JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true });
+            if (formatted.Length > 14000) formatted = formatted[..14000] + "\n... output shortened; full JSON contains the remaining data.";
+            AnsiConsole.Write(new Panel(new Text(formatted))
+            {
+                Header = new PanelHeader($"  {property.ToUpperInvariant()}  "),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0)
+            });
+        }
+    }
+
+    private static void RenderWindowsLifecycleNotice(JsonElement root)
+    {
+        if (!root.TryGetProperty("windows", out var windows)) return;
+        var caption = windows.TryGetProperty("caption", out var c) ? c.GetString() ?? string.Empty : string.Empty;
+        if (caption.Contains("Windows 10", StringComparison.OrdinalIgnoreCase) &&
+            !caption.Contains("LTSC", StringComparison.OrdinalIgnoreCase) &&
+            !caption.Contains("LTSB", StringComparison.OrdinalIgnoreCase))
+        {
+            AnsiConsole.MarkupLine("\n[yellow bold]Lifecycle advisory:[/] Standard Windows 10 servicing ended on 2025-10-14. Corporate ESU or a specific long-term servicing edition may change the applicable lifecycle; verify the workstation's managed servicing status.");
+        }
     }
 
     private static void RunLogs()
