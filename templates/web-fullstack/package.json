@@ -1,0 +1,25 @@
+{
+  "name": "offline-fullstack-cache-seed",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Dependency seed used to build a complete npm cache for offline Windows development.",
+  "dependencies": {
+    "axios": "latest",
+    "express": "latest",
+    "fastify": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "socket.io": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "eslint": "latest",
+    "nodemon": "latest",
+    "prettier": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
