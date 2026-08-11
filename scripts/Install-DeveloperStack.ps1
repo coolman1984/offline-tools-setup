@@ -11,7 +11,7 @@ $Config = Get-Content (Join-Path $BundleRoot 'config\developer-stack.json') -Raw
 $Payload = Join-Path $BundleRoot 'payload\developer'
 if (-not (Test-Path $Payload)) { throw 'Developer stack payload is missing from the offline bundle.' }
 if ($Config.policy.localModelsAllowed -ne $false) { throw 'Policy violation: local models must remain disabled.' }
-if ($Config.policy.bashAllowed -ne $false) { throw 'Policy violation: Bash must remain disabled on target PCs.' }
+if ($Config.policy.bashRequired -ne $false -or $Config.policy.bashDefaultShell -ne $false) { throw 'Policy violation: Bash may exist only as an isolated fallback, never as a required/default shell.' }
 
 function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Test-PortAvailable([int]$Port) {
@@ -77,6 +77,15 @@ Copy-Item (Join-Path $Payload 'git') $GitRoot -Recurse -Force
 $GitExe = Join-Path $GitRoot 'cmd\git.exe'
 if (-not (Test-Path $GitExe)) { throw 'Git executable not found.' }
 
+Write-Step 'Installing isolated Portable Git Bash compatibility fallback'
+$BashRoot = Join-Path $DevRoot 'GitBash'
+$BashSource = Join-Path $Payload 'git-bash'
+Remove-Item $BashRoot -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $BashSource) { Copy-Item $BashSource $BashRoot -Recurse -Force }
+$BashExe = Join-Path $BashRoot 'bin\bash.exe'
+if (-not (Test-Path $BashExe)) { throw 'Portable Git Bash fallback is missing from the bundle.' }
+"@echo off`r`n`"$BashExe`" %*`r`n" | Set-Content (Join-Path $BinRoot 'bash-ots.cmd') -Encoding ASCII
+
 Write-Step 'Installing pre-staged core developer CLIs'
 $CoreCliRoot = Join-Path $DevRoot 'CLI-Core'
 Remove-Item $CoreCliRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -87,6 +96,7 @@ if ($InstallAiTools) {
     Write-Step 'Installing selected AI coding CLIs from local payload'
     Remove-Item $AiCliRoot -Recurse -Force -ErrorAction SilentlyContinue
     Copy-Item (Join-Path $Payload 'cli-ai') $AiCliRoot -Recurse -Force
+    [Environment]::SetEnvironmentVariable('CLAUDE_CODE_GIT_BASH_PATH',$BashExe,'Machine')
 }
 
 [Environment]::SetEnvironmentVariable('DISABLE_AUTOUPDATER','1','Machine')
@@ -188,16 +198,18 @@ Write-Step 'Developer stack smoke tests'
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 smoke test failed.' }
 & $GitExe --version
 if ($LASTEXITCODE -ne 0) { throw 'Git smoke test failed.' }
+& $BashExe --version
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Portable Git Bash exists but could not execute. Corporate application-control policy may be blocking it.' }
 foreach ($Command in @('pnpm.cmd','yarn.cmd','tsc.cmd','node-gyp.cmd')) {
     if (-not (Test-Path (Join-Path $CoreCliRoot $Command))) { throw "Missing core developer CLI launcher: $Command" }
 }
 if ($InstallAiTools) {
-    foreach ($Command in @('codex.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
+    foreach ($Command in @('codex.cmd','claude.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
         if (-not (Test-Path (Join-Path $AiCliRoot $Command))) { throw "Missing AI CLI launcher: $Command" }
     }
 }
 
 Write-Host '`nWINDOWS-NATIVE DEVELOPER STACK INSTALLED.' -ForegroundColor Green
 Write-Host "Local development hub: http://127.0.0.1:$GiteaPort/" -ForegroundColor Green
-Write-Host 'No developer tool directory was added directly to the global PATH.' -ForegroundColor Green
-Write-Host 'Claude Code remains outside the guaranteed profile because Git Bash and WSL are forbidden.' -ForegroundColor Yellow
+Write-Host 'PowerShell and CMD remain the primary shells. Portable Git Bash is an isolated compatibility fallback only.' -ForegroundColor Green
+if ($InstallAiTools) { Write-Host 'Claude Code was staged with CLAUDE_CODE_GIT_BASH_PATH pointing to the managed fallback.' -ForegroundColor Yellow }
