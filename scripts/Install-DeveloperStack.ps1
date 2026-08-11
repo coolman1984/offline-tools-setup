@@ -10,6 +10,7 @@ $Config = Get-Content (Join-Path $BundleRoot 'config\developer-stack.json') -Raw
 $Payload = Join-Path $BundleRoot 'payload\developer'
 if (-not (Test-Path $Payload)) { throw 'Developer stack payload is missing from the offline bundle.' }
 if ($Config.policy.localModelsAllowed -ne $false) { throw 'Policy violation: local models must remain disabled.' }
+if ($Config.policy.bashAllowed -ne $false) { throw 'Policy violation: Bash must remain disabled on target PCs.' }
 
 function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Add-MachinePath([string]$PathToAdd) {
@@ -22,6 +23,15 @@ function Add-MachinePath([string]$PathToAdd) {
 
 $DevRoot = Join-Path $InstallRoot 'Developer'
 New-Item -ItemType Directory -Force -Path $DevRoot | Out-Null
+
+Write-Step 'Installing portable PowerShell 7'
+$PsRoot = Join-Path $DevRoot 'PowerShell7'
+Remove-Item $PsRoot -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $Payload 'powershell') $PsRoot -Recurse -Force
+$Pwsh = Join-Path $PsRoot 'pwsh.exe'
+if (-not (Test-Path $Pwsh)) { throw 'PowerShell 7 executable was not found.' }
+Add-MachinePath $PsRoot
+[Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT','1','Machine')
 
 Write-Step 'Installing portable VS Code with pre-bundled extensions'
 $VsCodeSource = Join-Path $Payload 'vscode'
@@ -41,23 +51,22 @@ $VsSettings = @{
     'extensions.ignoreRecommendations' = $true
     'telemetry.telemetryLevel' = 'off'
     'workbench.enableExperiments' = $false
+    'terminal.integrated.defaultProfile.windows' = 'PowerShell'
 } | ConvertTo-Json -Depth 4
 $VsSettings | Set-Content (Join-Path $SettingsDir 'settings.json') -Encoding UTF8
+$ProfilesDir = Join-Path $SettingsDir
 $CodeCmd = Join-Path $VsCodeRoot 'bin\code.cmd'
 if (-not (Test-Path $CodeCmd)) { throw 'VS Code command not found after copy.' }
 Add-MachinePath (Join-Path $VsCodeRoot 'bin')
 
-Write-Step 'Installing portable Git and Git Bash'
+Write-Step 'Installing MinGit for PowerShell and Command Prompt'
 $GitRoot = Join-Path $DevRoot 'Git'
 Remove-Item $GitRoot -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $Payload 'git') $GitRoot -Recurse -Force
 $GitCmdDir = Join-Path $GitRoot 'cmd'
-$GitBash = Join-Path $GitRoot 'bin\bash.exe'
-if (-not (Test-Path (Join-Path $GitCmdDir 'git.exe'))) { throw 'Git executable not found.' }
+$GitExe = Join-Path $GitCmdDir 'git.exe'
+if (-not (Test-Path $GitExe)) { throw 'Git executable not found.' }
 Add-MachinePath $GitCmdDir
-if (Test-Path $GitBash) {
-    [Environment]::SetEnvironmentVariable('CLAUDE_CODE_GIT_BASH_PATH',$GitBash,'Machine')
-}
 
 Write-Step 'Installing pre-staged AI and developer CLIs'
 $CliRoot = Join-Path $DevRoot 'CLI'
@@ -106,10 +115,6 @@ REQUIRE_SIGNIN_VIEW = true
 
 [security]
 INSTALL_LOCK = true
-
-[other]
-SHOW_FOOTER_VERSION = true
-SHOW_FOOTER_TEMPLATE_LOAD_TIME = false
 "@
 $AppIni | Set-Content $GiteaConfig -Encoding UTF8
 & $GiteaExe --work-path $GiteaRoot --config $GiteaConfig migrate
@@ -127,8 +132,6 @@ Username: offline-admin
 Temporary password: $Password
 Change this password on first login.
 "@ | Set-Content $AdminMarker -Encoding UTF8
-    } else {
-        Write-Warning 'Could not create the initial Gitea admin automatically. The server is installed; create an admin with the Gitea CLI.'
     }
 }
 
@@ -150,18 +153,21 @@ Write-Step 'Creating local launchers'
 $Launchers = Join-Path $InstallRoot 'bin'
 New-Item -ItemType Directory -Force -Path $Launchers | Out-Null
 "@echo off`r`n`"$CodeCmd`" %*" | Set-Content (Join-Path $Launchers 'code-offline.cmd') -Encoding ASCII
+"@echo off`r`n`"$Pwsh`" %*" | Set-Content (Join-Path $Launchers 'pwsh-offline.cmd') -Encoding ASCII
 "@echo off`r`nstart `"`" http://127.0.0.1:3000/" | Set-Content (Join-Path $Launchers 'dev-hub.cmd') -Encoding ASCII
 Add-MachinePath $Launchers
 
 Write-Step 'Developer stack smoke tests'
-& (Join-Path $GitCmdDir 'git.exe') --version
+& $Pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 smoke test failed.' }
+& $GitExe --version
 if ($LASTEXITCODE -ne 0) { throw 'Git smoke test failed.' }
-foreach ($Command in @('codex.cmd','claude.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
+foreach ($Command in @('codex.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
     $Path = Join-Path $CliRoot $Command
     if (-not (Test-Path $Path)) { throw "Missing AI CLI launcher: $Command" }
 }
 
-Write-Host '`nOFFLINE DEVELOPER STACK INSTALLED.' -ForegroundColor Green
-Write-Host 'No models were installed. No package/extension downloads are required on the target PC.' -ForegroundColor Green
-Write-Host 'Network access is only needed later for approved AI authentication and inference endpoints.' -ForegroundColor Green
-Write-Host 'Open a new terminal before using the new PATH entries.' -ForegroundColor Green
+Write-Host '`nWINDOWS-NATIVE DEVELOPER STACK INSTALLED.' -ForegroundColor Green
+Write-Host 'Shells: PowerShell 7 / Windows PowerShell / Command Prompt. Bash and WSL are not required.' -ForegroundColor Green
+Write-Host 'Claude Code is not included in the guaranteed profile because its official Windows runtime currently requires Git Bash or WSL.' -ForegroundColor Yellow
+Write-Host 'No models were installed. No package or extension downloads are required on the target PC.' -ForegroundColor Green
