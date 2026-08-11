@@ -1,0 +1,16 @@
+numpy
+pandas
+polars
+pyarrow
+scipy
+scikit-learn
+statsmodels
+matplotlib
+plotly
+duckdb
+SQLAlchemy
+pyodbc
+pymssql
+psycopg[binary]
+mysql-connector-python
+sqlite-utils
