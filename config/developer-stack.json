@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "policy": {
     "targetInternetMode": "ai-services-only",
     "targetDownloadsAllowed": false,
@@ -71,11 +71,7 @@
     "prettier",
     "@vscode/vsce"
   ],
-  "vscodeExtensions": [
-    "OpenAI.chatgpt",
-    "saoudrizwan.claude-dev",
-    "kilocode.Kilo-Code",
-    "sst-dev.opencode",
+  "vscodeExtensionsCore": [
     "ms-python.python",
     "ms-python.vscode-pylance",
     "ms-python.debugpy",
@@ -84,6 +80,12 @@
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode",
     "eamodio.gitlens"
+  ],
+  "vscodeExtensionsAi": [
+    "OpenAI.chatgpt",
+    "saoudrizwan.claude-dev",
+    "kilocode.Kilo-Code",
+    "sst-dev.opencode"
   ],
   "desktopApps": [
     {
