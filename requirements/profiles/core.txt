@@ -1,0 +1,14 @@
+setuptools
+wheel
+virtualenv
+packaging
+requests
+httpx
+pydantic
+python-dotenv
+rich
+typer
+click
+tenacity
+tqdm
+psutil
