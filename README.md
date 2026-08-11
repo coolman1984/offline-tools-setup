@@ -12,6 +12,8 @@ Target PCs use a restricted corporate network:
 - VS Code Marketplace/extension downloads are forbidden.
 - Self-updates are disabled.
 - No local AI models are installed or downloaded.
+- Bash is not available on target PCs.
+- WSL is not required or assumed.
 
 Every executable, extension, runtime, package, native dependency, and development tool must therefore be prepared on the connected builder PC and transported inside the verified offline bundle.
 
@@ -20,29 +22,46 @@ Every executable, extension, runtime, package, native dependency, and developmen
 1. **Connected Bundle Builder** — runs on a trusted internet-connected Windows x64 PC and prepares the complete frozen payload.
 2. **Restricted Target Installer** — verifies the payload and installs everything locally with zero target-side downloads.
 
+## Windows-native shell policy
+
+The guaranteed target shell stack is:
+
+- PowerShell 7 portable — primary developer shell
+- Windows PowerShell 5.1 — compatibility shell
+- Windows Command Prompt — fallback shell
+- Bash — disabled / unsupported by corporate environment
+- WSL — not required
+
 ## Developer workstation
 
-The bundle now prepares:
+The bundle prepares:
 
 - Portable Visual Studio Code with a private portable profile
 - Pre-bundled VS Code extensions; no Marketplace access required on target PCs
-- Git for Windows + Git Bash
+- Portable PowerShell 7
+- MinGit for Windows, usable from PowerShell and Command Prompt
 - Local Gitea server with SQLite as an offline GitHub-like development hub
 - Codex CLI
-- Claude Code CLI
 - Cline CLI
 - Kilo CLI
 - OpenCode CLI
 - OpenCode Windows desktop payload
 - Codex VS Code extension
-- Claude Code VS Code extension
 - Cline VS Code extension
 - Kilo Code VS Code extension
 - OpenCode VS Code extension
-- Python, PowerShell, Jupyter, ESLint, Prettier, Git tooling extensions
+- Python, PowerShell, Jupyter, ESLint, Prettier, and Git tooling extensions
 - pnpm, Yarn, TypeScript, TSX, ESLint, Prettier, VS Code extension tooling
 
-ChatGPT/Codex Desktop and Claude Desktop have offline-payload hooks under `vendor/desktop/`. If your organization provides approved offline Windows application packages, place them there before running the bundle builder; they will be transported without target-side downloads.
+## Claude Code compatibility exception
+
+Claude Code is intentionally excluded from the guaranteed Windows-native profile. Anthropic currently documents two supported Windows paths: WSL or native Windows with Git Bash. The target environment provides neither.
+
+Claude Desktop may still be transported as a separately approved offline Windows application package, and Anthropic-compatible models can still be used through other installed clients if corporate network policy permits their AI endpoints. No local model is installed.
+
+## Desktop application payloads
+
+ChatGPT/Codex Desktop and Claude Desktop have offline-payload hooks under `vendor/desktop/`. If the organization provides approved offline Windows application packages, place them there before running the bundle builder; they will be transported without target-side downloads.
 
 Kilo currently uses its CLI/VS Code surfaces plus its local browser-based console rather than a Windows desktop application. Cline is supplied through its CLI and VS Code extension.
 
@@ -111,9 +130,9 @@ Kilo currently uses its CLI/VS Code surfaces plus its local browser-based consol
 - Verify-before-install behavior
 - No target-side package or extension downloads
 - VS Code program/extension auto-update disabled
-- Claude Code updater disabled in the managed environment
 - npm forced into offline mode on target PCs
 - No local AI models
+- No Bash dependency
 - Installation logs and smoke tests
 - Side-by-side Python versions
 - Local Git server bound to `127.0.0.1` by default
