@@ -45,9 +45,35 @@
     "zipFile": "node-v24.19.0-win-x64.zip",
     "shasumsUrl": "https://nodejs.org/dist/v24.19.0/SHASUMS256.txt"
   },
+  "microsoft": {
+    "visualCppRuntime": {
+      "file": "vc_redist.x64.exe",
+      "url": "https://aka.ms/vc14/vc_redist.x64.exe"
+    },
+    "sqlOdbc": {
+      "version": "18.6.2.1",
+      "file": "msodbcsql18-x64.msi",
+      "url": "https://download.microsoft.com/download/7bf9fad4-0f21-486d-a750-fc990ded5624/amd64/1033/msodbcsql.msi"
+    },
+    "sqlServerExpress": {
+      "version": "2022",
+      "instanceName": "SQLEXPRESS",
+      "offlineMediaRelativePath": "payload/native/sql-server-express",
+      "requiredSetupFile": "setup.exe",
+      "optional": true
+    }
+  },
+  "ocr": {
+    "baseline": "rapidocr-onnxruntime",
+    "tesseract": {
+      "optional": true,
+      "offlineInstallerRelativePath": "payload/native/tesseract/tesseract-installer.exe",
+      "languages": ["eng", "ara"]
+    }
+  },
   "profiles": {
     "recommended": ["core", "data", "office", "pdf", "ocr-basic", "databases", "web-backend", "testing"],
-    "optional": ["ocr-heavy", "sql-server", "web-fullstack"]
+    "optional": ["ocr-heavy", "tesseract", "sql-server", "web-fullstack"]
   },
   "installation": {
     "root": "C:\\OfflineTools",
