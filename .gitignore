@@ -1,4 +1,5 @@
 offline-bundle/
+native-source/
 build/
 work/
 *.log
