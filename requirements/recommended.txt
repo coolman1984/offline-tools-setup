@@ -1,0 +1,78 @@
+# Core developer tooling
+setuptools
+wheel
+virtualenv
+packaging
+requests
+httpx
+pydantic
+python-dotenv
+rich
+typer
+click
+tenacity
+tqdm
+psutil
+
+# Data analysis and science
+numpy
+pandas
+polars
+pyarrow
+scipy
+scikit-learn
+statsmodels
+matplotlib
+plotly
+
+# Excel and Microsoft Office automation
+openpyxl
+XlsxWriter
+xlrd
+pyxlsb
+odfpy
+pywin32
+comtypes
+python-docx
+python-pptx
+olefile
+msoffcrypto-tool
+
+# PDF
+pypdf
+PyMuPDF
+pdfplumber
+pikepdf
+reportlab
+
+# OCR and image processing
+pytesseract
+Pillow
+opencv-python
+rapidfuzz
+
+# Databases and SQL
+duckdb
+SQLAlchemy
+pyodbc
+pymssql
+psycopg[binary]
+mysql-connector-python
+sqlite-utils
+
+# Web and API backend
+fastapi
+uvicorn[standard]
+flask
+django
+jinja2
+websockets
+aiofiles
+python-multipart
+
+# Testing and code quality
+pytest
+pytest-cov
+ruff
+mypy
+black
