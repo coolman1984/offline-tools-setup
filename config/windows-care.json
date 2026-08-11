@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "productName": "Windows Safe Care Center",
   "guardrails": {
     "neverDeleteUserFolders": true,
@@ -10,6 +10,7 @@
     "neverUseDismResetBase": true,
     "neverForceChkdskOfflineRepairByDefault": true,
     "neverDeleteUpdateRollbackDataWithoutExplicitAdvancedChoice": true,
+    "attemptRestorePointBeforeRepairs": true,
     "defaultTempAgeDays": 14
   },
   "presets": [
@@ -17,24 +18,29 @@
       "id": "quick-health",
       "name": "Quick Health Check",
       "description": "Fast read-only checks suitable before installing the development suite.",
-      "actions": ["disk-space-analysis", "pending-reboot", "dism-checkhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health"]
+      "actions": ["disk-space-analysis", "pending-reboot", "windows-installer-health", "time-service-health", "runtime-readiness", "development-environment-health", "dism-checkhealth", "chkdsk-scan", "storage-health", "device-problems", "windows-update-health"]
     },
     {
       "id": "deep-diagnostics",
       "name": "Deep Diagnostics",
       "description": "Thorough read-only diagnostics focused on Windows integrity and hardware health. Some checks can take a long time.",
-      "actions": ["disk-space-analysis", "pending-reboot", "component-store-analysis", "dism-scanhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health", "power-health"]
+      "actions": ["disk-space-analysis", "pending-reboot", "windows-installer-health", "time-service-health", "vss-health", "runtime-readiness", "development-environment-health", "component-store-analysis", "dism-scanhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health", "power-health"]
     },
     {
       "id": "all-diagnostics",
       "name": "All Diagnostics",
       "description": "Runs every read-only Windows Care diagnostic. Long-running checks are included; no repair action is executed.",
-      "actions": ["disk-space-analysis", "pending-reboot", "component-store-analysis", "dism-checkhealth", "dism-scanhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health", "power-health"]
+      "actions": ["disk-space-analysis", "pending-reboot", "windows-installer-health", "time-service-health", "vss-health", "runtime-readiness", "development-environment-health", "component-store-analysis", "dism-checkhealth", "dism-scanhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health", "power-health"]
     }
   ],
   "actions": [
     {"id":"disk-space-analysis","name":"Disk space analysis","category":"Diagnostics","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Measures safe cleanup candidates and large Windows-maintenance caches without deleting anything."},
     {"id":"pending-reboot","name":"Pending restart check","category":"Diagnostics","mode":"diagnostic","duration":"instant","risk":"none","defaultSelected":true,"description":"Detects servicing, update and pending file rename restart markers."},
+    {"id":"windows-installer-health","name":"Windows Installer health","category":"Core Services","mode":"diagnostic","duration":"instant","risk":"none","defaultSelected":true,"description":"Checks Windows Installer service state, executable version and in-progress transaction markers without starting or repairing the service."},
+    {"id":"time-service-health","name":"Windows time health","category":"Core Services","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Checks time service and synchronization state because clock problems can break TLS, sign-in and certificate validation."},
+    {"id":"vss-health","name":"Volume Shadow Copy health","category":"Recovery","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":false,"description":"Lists VSS writers and existing shadow copies. It never deletes or resizes shadow storage."},
+    {"id":"runtime-readiness","name":"Windows runtime readiness","category":"Core Services","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Inventories legacy .NET Framework readiness and related Windows runtime prerequisites without installing optional features."},
+    {"id":"development-environment-health","name":"Development environment readiness","category":"Diagnostics","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Reports PATH duplication, PowerShell policy/language mode, application-control state, proxy settings and conflicting Python commands without changing them."},
     {"id":"component-store-analysis","name":"Windows component store analysis","category":"Diagnostics","mode":"diagnostic","duration":"medium","risk":"none","defaultSelected":false,"description":"Runs DISM AnalyzeComponentStore. Does not delete WinSxS files."},
     {"id":"dism-checkhealth","name":"DISM quick component-store health","category":"Windows Integrity","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Checks whether Windows has already marked the component store as corrupted."},
     {"id":"dism-scanhealth","name":"DISM deep component-store scan","category":"Windows Integrity","mode":"diagnostic","duration":"long","risk":"none","defaultSelected":false,"description":"Performs a full corruption scan. Can take significant time."},
@@ -48,7 +54,7 @@
     {"id":"cleanup-stale-temp","name":"Clean stale temporary files","category":"Safe Cleanup","mode":"repair","duration":"medium","risk":"low","defaultSelected":false,"description":"Deletes only old, unlocked files under approved temporary folders. User documents and downloads are never touched."},
     {"id":"cleanup-delivery-cache","name":"Clear Delivery Optimization cache","category":"Safe Cleanup","mode":"repair","duration":"short","risk":"low","defaultSelected":false,"description":"Uses the Windows Delivery Optimization cmdlet and preserves pinned content by default."},
     {"id":"component-cleanup","name":"Safe Windows component cleanup","category":"Safe Cleanup","mode":"repair","duration":"long","risk":"low","defaultSelected":false,"description":"Runs DISM StartComponentCleanup. ResetBase is deliberately forbidden."},
-    {"id":"dism-restore-local","name":"Repair Windows image from matching local source","category":"Windows Integrity","mode":"repair","duration":"long","risk":"low","defaultSelected":false,"description":"Runs DISM RestoreHealth only when a matching pre-bundled local repair source is available; Windows Update is not contacted."},
+    {"id":"dism-restore-local","name":"Repair Windows image from verified local source","category":"Windows Integrity","mode":"repair","duration":"long","risk":"low","defaultSelected":false,"description":"Runs DISM RestoreHealth only when a locally bundled repair source matches Windows build/revision, architecture and language metadata; Windows Update is not contacted."},
     {"id":"sfc-repair","name":"Repair protected Windows system files","category":"Windows Integrity","mode":"repair","duration":"long","risk":"low","defaultSelected":false,"description":"Runs SFC /scannow after component-store health is suitable."},
     {"id":"windows-update-reset","name":"Rebuild Windows Update working cache","category":"Windows Update","mode":"repair","duration":"medium","risk":"moderate","defaultSelected":false,"description":"Stops update services and renames SoftwareDistribution/Catroot2 to timestamped backups, then restarts services. Nothing is immediately deleted."}
   ]
