@@ -1,5 +1,6 @@
 param(
-    [string]$InstallRoot = 'C:\OfflineTools'
+    [string]$InstallRoot = 'C:\OfflineTools',
+    [string[]]$PackageProfiles = @('core','office','pdf','ocr','data-database','web-python','quality')
 )
 
 Set-StrictMode -Version Latest
@@ -59,7 +60,6 @@ if ($LASTEXITCODE -ne 0) {
     Stop-WithError 'Bundle verification failed. Nothing will be installed.' 20
 }
 
-# Hard offline package-manager behavior. These values prevent accidental fallback to public indexes.
 $env:PIP_NO_INDEX = '1'
 $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
 $env:PIP_DEFAULT_TIMEOUT = '1'
@@ -112,7 +112,7 @@ foreach ($Python in $Manifest.python.versions) {
     "@echo off`r`n`"$PythonExe`" -m pip %*" | Set-Content (Join-Path $BinRoot "pip$Short.cmd") -Encoding ASCII
 }
 
-Write-Step 'Creating the full offline Python environment'
+Write-Step 'Creating managed Python environment'
 $PrimaryVersion = $Manifest.python.primary
 $PrimaryPython = Join-Path $PythonRoot "$PrimaryVersion\python.exe"
 $PrimaryParts = $PrimaryVersion.Split('.')
@@ -127,8 +127,16 @@ if (-not (Test-Path $EnvPython)) {
     if ($LASTEXITCODE -ne 0) { Stop-WithError 'Could not create primary virtual environment.' 41 }
 }
 
-& $EnvPython -m pip install --no-index --find-links $Wheelhouse -r (Join-Path $BundleRoot 'requirements\recommended.txt')
-if ($LASTEXITCODE -ne 0) { Stop-WithError 'Offline Python package installation failed.' 42 }
+$UniqueProfiles = @($PackageProfiles | Where-Object { $_ } | Select-Object -Unique)
+if ($UniqueProfiles -notcontains 'core') { $UniqueProfiles = @('core') + $UniqueProfiles }
+
+foreach ($Profile in $UniqueProfiles) {
+    $RequirementsFile = Join-Path $BundleRoot ("requirements\profiles\{0}.txt" -f $Profile)
+    if (-not (Test-Path $RequirementsFile)) { Stop-WithError "Unknown or missing Python package profile: $Profile" 42 }
+    Write-Step "Installing offline Python profile: $Profile"
+    & $EnvPython -m pip install --no-index --find-links $Wheelhouse -r $RequirementsFile
+    if ($LASTEXITCODE -ne 0) { Stop-WithError "Offline Python profile failed: $Profile" 43 }
+}
 
 "@echo off`r`n`"$EnvPython`" %*" | Set-Content (Join-Path $BinRoot 'python-full.cmd') -Encoding ASCII
 "@echo off`r`n`"$EnvPython`" -m pip %*" | Set-Content (Join-Path $BinRoot 'pip-full.cmd') -Encoding ASCII
@@ -152,15 +160,23 @@ $NpmCmd = Join-Path $env:ProgramFiles 'nodejs\npm.cmd'
 
 Write-Step 'Adding managed command wrappers to machine PATH'
 $MachinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+if (-not $MachinePath) { $MachinePath = '' }
 if (($MachinePath -split ';') -notcontains $BinRoot) {
-    [Environment]::SetEnvironmentVariable('Path', ($MachinePath.TrimEnd(';') + ';' + $BinRoot), 'Machine')
+    [Environment]::SetEnvironmentVariable('Path', ($MachinePath.TrimEnd(';') + ';' + $BinRoot).TrimStart(';'), 'Machine')
 }
 
-Write-Step 'Running local smoke tests'
+Write-Step 'Running profile-aware smoke tests'
+$Imports = @('requests','pydantic')
+if ($UniqueProfiles -contains 'office') { $Imports += @('openpyxl','win32com.client','docx','pptx') }
+if ($UniqueProfiles -contains 'pdf') { $Imports += @('pypdf','fitz','pdfplumber') }
+if ($UniqueProfiles -contains 'ocr') { $Imports += @('PIL','cv2') }
+if ($UniqueProfiles -contains 'data-database') { $Imports += @('pandas','numpy','duckdb','sqlalchemy') }
+if ($UniqueProfiles -contains 'web-python') { $Imports += @('fastapi','flask','django') }
+$ImportStatement = ($Imports | Select-Object -Unique | ForEach-Object { "import $_" }) -join '; '
 & $PrimaryPython --version
 if ($LASTEXITCODE -ne 0) { Stop-WithError 'Primary Python smoke test failed.' 60 }
-& $EnvPython -c "import pandas, numpy, openpyxl, duckdb, pypdf, fitz, fastapi; print('Python full environment OK')"
-if ($LASTEXITCODE -ne 0) { Stop-WithError 'Python package smoke test failed.' 61 }
+& $EnvPython -c "$ImportStatement; print('Selected Python profiles OK')"
+if ($LASTEXITCODE -ne 0) { Stop-WithError 'Selected Python package smoke test failed.' 61 }
 & $NodeExe --version
 if ($LASTEXITCODE -ne 0) { Stop-WithError 'Node.js smoke test failed.' 62 }
 
@@ -169,7 +185,8 @@ Offline Tools Setup completed successfully.
 
 Install root: $InstallRoot
 Primary Python: $PrimaryVersion
-Full Python environment: $FullEnv
+Managed Python environment: $FullEnv
+Python profiles: $($UniqueProfiles -join ', ')
 Node.js: $($Manifest.node.version)
 Offline npm cache: $NpmCacheRoot
 Log: $LogFile
