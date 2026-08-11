@@ -27,7 +27,8 @@ function Invoke-Setup([string]$FilePath,[object[]]$Arguments,[string]$Name,[int[
 if (-not (Test-IsAdministrator)) { throw 'Native build toolchain installation requires Administrator rights.' }
 $Manifest = Get-Content (Join-Path $BundleRoot 'config\tool-manifest.json') -Raw | ConvertFrom-Json
 $BinRoot = Join-Path $InstallRoot 'bin'
-New-Item -ItemType Directory -Force -Path $BinRoot | Out-Null
+$ManagedMediaRoot = Join-Path $InstallRoot 'media'
+New-Item -ItemType Directory -Force -Path $BinRoot,$ManagedMediaRoot | Out-Null
 
 Write-Host "`n==> Installing .NET 10 LTS SDK from local media" -ForegroundColor Cyan
 $DotNetInstaller = Join-Path $BundleRoot ('payload\installers\dotnet\' + [string]$Manifest.microsoft.dotnetSdk.file)
@@ -38,20 +39,29 @@ try { $InstalledSdks = @(& dotnet.exe --list-sdks 2>$null) } catch {}
 if (-not ($InstalledSdks | Where-Object { $_ -match ('^' + [regex]::Escape($RequiredSdk) + '\s') })) {
     Invoke-Setup $DotNetInstaller @('/install','/quiet','/norestart') '.NET SDK'
 }
-$DotNetExe = Get-Command dotnet.exe -ErrorAction SilentlyContinue
-if (-not $DotNetExe) {
-    $DotNetCandidate = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
-    if (Test-Path $DotNetCandidate) { $DotNetExe = Get-Item $DotNetCandidate }
-}
+$DotNetCandidate = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+$DotNetExe = if (Test-Path $DotNetCandidate) { Get-Item $DotNetCandidate } else { Get-Command dotnet.exe -ErrorAction SilentlyContinue }
 if (-not $DotNetExe) { throw '.NET SDK installation completed but dotnet.exe was not found.' }
-"@echo off`r`n`"$($DotNetExe.Source)`" %*`r`n" | Set-Content (Join-Path $BinRoot 'dotnet-ots.cmd') -Encoding ASCII
+"@echo off`r`n`"$($DotNetExe.FullName)`" %*`r`n" | Set-Content (Join-Path $BinRoot 'dotnet-ots.cmd') -Encoding ASCII
 
-Write-Host "`n==> Installing Microsoft C/C++ Build Tools from complete offline layout" -ForegroundColor Cyan
-$BuildToolsRoot = Join-Path $BundleRoot ([string]$Manifest.microsoft.visualStudioBuildTools.offlineMediaRelativePath)
+Write-Host "`n==> Staging Microsoft C/C++ Build Tools layout to a short managed local path" -ForegroundColor Cyan
+$BundleBuildToolsRoot = Join-Path $BundleRoot ([string]$Manifest.microsoft.visualStudioBuildTools.offlineMediaRelativePath)
+$BundleBuildToolsSetup = Join-Path $BundleBuildToolsRoot ([string]$Manifest.microsoft.visualStudioBuildTools.requiredSetupFile)
+if (-not (Test-Path $BundleBuildToolsSetup)) {
+    throw "Native Build Toolchain was selected, but complete Visual Studio Build Tools offline media is missing: $BundleBuildToolsSetup"
+}
+$BuildToolsRoot = Join-Path $ManagedMediaRoot 'vs-build-tools'
 $BuildToolsSetup = Join-Path $BuildToolsRoot ([string]$Manifest.microsoft.visualStudioBuildTools.requiredSetupFile)
 if (-not (Test-Path $BuildToolsSetup)) {
-    throw "Native Build Toolchain was selected, but complete Visual Studio Build Tools offline media is missing: $BuildToolsSetup"
+    Remove-Item $BuildToolsRoot -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $BuildToolsRoot | Out-Null
+    Copy-Item (Join-Path $BundleBuildToolsRoot '*') $BuildToolsRoot -Recurse -Force
 }
+if ($BuildToolsRoot.Length -ge [int]$Manifest.microsoft.visualStudioBuildTools.layoutPathMaxLength) {
+    throw "Managed Visual Studio layout path is too long: $BuildToolsRoot"
+}
+
+Write-Host "`n==> Installing Microsoft C/C++ Build Tools with web access explicitly disabled" -ForegroundColor Cyan
 $VsArgs = @(
     '--quiet','--wait','--norestart','--noweb',
     '--add',[string]$Manifest.microsoft.visualStudioBuildTools.workload,
@@ -70,12 +80,9 @@ if (-not $VsInstall) { throw 'MSVC x64/x86 compiler component was not detected a
 $VcVars = Join-Path $VsInstall 'VC\Auxiliary\Build\vcvars64.bat'
 if (-not (Test-Path $VcVars)) { throw "MSVC environment script was not found: $VcVars" }
 
-$NativeShell = "@echo off`r`ncall `"$VcVars`" >nul`r`ncmd.exe /k`r`n"
-$NativeShell | Set-Content (Join-Path $BinRoot 'native-shell-ots.cmd') -Encoding ASCII
-$ClWrapper = "@echo off`r`ncall `"$VcVars`" >nul`r`ncl.exe %*`r`n"
-$ClWrapper | Set-Content (Join-Path $BinRoot 'cl-ots.cmd') -Encoding ASCII
-$MsBuildWrapper = "@echo off`r`ncall `"$VcVars`" >nul`r`nmsbuild.exe %*`r`n"
-$MsBuildWrapper | Set-Content (Join-Path $BinRoot 'msbuild-ots.cmd') -Encoding ASCII
+"@echo off`r`ncall `"$VcVars`" >nul`r`ncmd.exe /k`r`n" | Set-Content (Join-Path $BinRoot 'native-shell-ots.cmd') -Encoding ASCII
+"@echo off`r`ncall `"$VcVars`" >nul`r`ncl.exe %*`r`n" | Set-Content (Join-Path $BinRoot 'cl-ots.cmd') -Encoding ASCII
+"@echo off`r`ncall `"$VcVars`" >nul`r`nmsbuild.exe %*`r`n" | Set-Content (Join-Path $BinRoot 'msbuild-ots.cmd') -Encoding ASCII
 
 Write-Host "`n==> Staging pre-bundled Node.js headers for zero-download native addon builds" -ForegroundColor Cyan
 $HeadersSource = Join-Path $BundleRoot 'payload\developer\node-headers'
@@ -97,7 +104,8 @@ if ($ManagedPython -and (Test-Path $NodeGyp)) {
 Write-Host "`n==> Validating compiler and SDK toolchain" -ForegroundColor Cyan
 & (Join-Path $BinRoot 'cl-ots.cmd') 2>&1 | Select-Object -First 5 | Write-Host
 if ($LASTEXITCODE -notin 0,2) { throw 'MSVC compiler validation failed.' }
-& $DotNetExe.Source --version
+& $DotNetExe.FullName --version
 if ($LASTEXITCODE -ne 0) { throw '.NET SDK validation failed.' }
 
 Write-Host '`nNative Windows build toolchain installed successfully.' -ForegroundColor Green
+Write-Host "Repairable Build Tools media retained at: $BuildToolsRoot" -ForegroundColor Green
