@@ -10,7 +10,7 @@ namespace OfflineToolsSetup;
 
 internal static class Program
 {
-    private const string Version = "0.2.0";
+    private const string ProductVersion = "0.3.0";
 
     public static int Main(string[] args)
     {
@@ -22,9 +22,7 @@ internal static class Program
         {
             var options = CommandLineOptions.Parse(args);
             var bundleRoot = ResolveBundleRoot(options.BundleRoot);
-            var configPath = Path.Combine(bundleRoot, "config", "setup-profiles.json");
-            var config = JsonSerializer.Deserialize<SetupConfiguration>(File.ReadAllText(configPath), JsonOptions())
-                         ?? throw new InvalidOperationException("Setup profile configuration could not be loaded.");
+            var config = LoadConfig(bundleRoot);
 
             RenderHeader(config);
             var scan = RunPreflightScan(bundleRoot);
@@ -32,13 +30,13 @@ internal static class Program
 
             if (!scan.IsWindows || !scan.Is64Bit)
             {
-                AnsiConsole.MarkupLine("\n[red bold]This package supports Windows 10/11 x64 only.[/]");
+                AnsiConsole.MarkupLine("\n[red bold]Unsupported platform.[/] This bundle targets Windows 10/11 x64.");
                 return 3;
             }
 
             if (!scan.IsAdministrator)
             {
-                AnsiConsole.MarkupLine("\n[red bold]Administrator rights are required.[/] The launcher should trigger UAC automatically.");
+                AnsiConsole.MarkupLine("\n[red bold]Administrator rights are required.[/] Windows should request elevation automatically.");
                 return 5;
             }
 
@@ -48,15 +46,9 @@ internal static class Program
                 return 0;
             }
 
-            InstallSelection selection;
-            if (!string.IsNullOrWhiteSpace(options.Preset))
-            {
-                selection = BuildPresetSelection(config, options.Preset!, includeAllSupportedComponents: options.Preset.Equals("complete", StringComparison.OrdinalIgnoreCase));
-            }
-            else
-            {
-                selection = RunInteractiveSelection(config, scan);
-            }
+            var selection = !string.IsNullOrWhiteSpace(options.Preset)
+                ? BuildPresetSelection(config, options.Preset!, options.Preset!.Equals("complete", StringComparison.OrdinalIgnoreCase))
+                : RunInteractiveSelection(config, scan);
 
             if (selection.ExitRequested)
                 return 0;
@@ -71,8 +63,8 @@ internal static class Program
 
             if (options.PlanOnly)
             {
-                var planOnlyPath = WritePlan(bundleRoot, selection, scan);
-                AnsiConsole.MarkupLine($"\n[green]Plan created:[/] {Markup.Escape(planOnlyPath)}");
+                var planPath = WritePlan(bundleRoot, selection, scan);
+                AnsiConsole.MarkupLine($"\n[green]Plan created:[/] {Markup.Escape(planPath)}");
                 return 0;
             }
 
@@ -80,7 +72,7 @@ internal static class Program
             {
                 if (scan.PendingReboot)
                 {
-                    AnsiConsole.MarkupLine("\n[yellow bold]A Windows restart is currently pending.[/] Installing now may increase file-lock and reboot risk.");
+                    AnsiConsole.MarkupLine("\n[yellow bold]Windows currently has a pending restart.[/] Installing now increases file-lock and reboot risk.");
                     if (!AnsiConsole.Confirm("Continue anyway?", false))
                         return 10;
                 }
@@ -89,8 +81,8 @@ internal static class Program
                     return 0;
             }
 
-            var planPath = WritePlan(bundleRoot, selection, scan);
-            return RunInstaller(bundleRoot, planPath);
+            var executablePlan = WritePlan(bundleRoot, selection, scan);
+            return RunInstaller(bundleRoot, executablePlan);
         }
         catch (Exception ex)
         {
@@ -106,6 +98,13 @@ internal static class Program
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private static SetupConfiguration LoadConfig(string bundleRoot)
+    {
+        var path = Path.Combine(bundleRoot, "config", "setup-profiles.json");
+        return JsonSerializer.Deserialize<SetupConfiguration>(File.ReadAllText(path), JsonOptions())
+               ?? throw new InvalidOperationException("Setup profile configuration could not be loaded.");
+    }
+
     private static string ResolveBundleRoot(string? explicitRoot)
     {
         if (!string.IsNullOrWhiteSpace(explicitRoot))
@@ -113,7 +112,7 @@ internal static class Program
             var full = Path.GetFullPath(explicitRoot);
             if (File.Exists(Path.Combine(full, "config", "setup-profiles.json")))
                 return full;
-            throw new DirectoryNotFoundException($"Bundle root does not contain config/setup-profiles.json: {full}");
+            throw new DirectoryNotFoundException($"Bundle root is invalid: {full}");
         }
 
         var current = AppContext.BaseDirectory;
@@ -121,7 +120,9 @@ internal static class Program
         {
             if (File.Exists(Path.Combine(current, "config", "setup-profiles.json")))
                 return current;
-            current = Directory.GetParent(current)?.FullName ?? current;
+            var parent = Directory.GetParent(current);
+            if (parent is null) break;
+            current = parent.FullName;
         }
 
         current = Directory.GetCurrentDirectory();
@@ -134,22 +135,25 @@ internal static class Program
     private static void RenderHeader(SetupConfiguration config)
     {
         AnsiConsole.Clear();
-        var title = new FigletText("OFFLINE TOOLS").Centered().Color(Color.Cyan1);
-        AnsiConsole.Write(title);
-        var panel = new Panel(
-            new Markup($"[bold white]{Markup.Escape(config.Ui.ProductName)}[/]\n[grey]{Markup.Escape(config.Ui.Subtitle)}[/]\n[deepskyblue1]Version {Version}[/]"))
+        AnsiConsole.Write(new FigletText("OFFLINE TOOLS").Centered().Color(Color.Cyan1));
+
+        var panel = new Panel(new Markup(
+            $"[bold white]{Markup.Escape(config.Ui.ProductName)}[/]\n" +
+            $"[grey]{Markup.Escape(config.Ui.Subtitle)}[/]\n" +
+            $"[deepskyblue1]Version {ProductVersion}[/]"))
         {
             Border = BoxBorder.Rounded,
             Header = new PanelHeader("  PROFESSIONAL SETUP  "),
             Padding = new Padding(2, 1)
         };
         AnsiConsole.Write(panel);
-        AnsiConsole.MarkupLine("[grey]Arrow keys navigate  •  Space toggles  •  Enter confirms  •  Esc cancels where available[/]\n");
+        AnsiConsole.MarkupLine("[grey]Arrow keys navigate  •  Space toggles  •  Enter confirms[/]\n");
     }
 
     private static PreflightScan RunPreflightScan(string bundleRoot)
     {
         var scan = new PreflightScan();
+
         AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots12)
             .SpinnerStyle(Style.Parse("cyan"))
@@ -159,16 +163,15 @@ internal static class Program
                 scan.Is64Bit = Environment.Is64BitOperatingSystem;
                 scan.IsAdministrator = IsAdministrator();
 
-                ctx.Status("[cyan]Reading Windows version and architecture...[/]");
+                ctx.Status("[cyan]Reading Windows information...[/]");
                 scan.WindowsName = ReadRegistryString(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName") ?? Environment.OSVersion.VersionString;
                 scan.WindowsBuild = ReadRegistryString(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber") ?? Environment.OSVersion.Version.Build.ToString();
 
-                ctx.Status("[cyan]Checking disk capacity...[/]");
-                var systemRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-                var drive = new DriveInfo(systemRoot);
+                ctx.Status("[cyan]Checking storage and restart state...[/]");
+                var root = Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\";
+                var drive = new DriveInfo(root);
                 scan.FreeDiskGb = Math.Round(drive.AvailableFreeSpace / 1024d / 1024d / 1024d, 1);
-
-                ctx.Status("[cyan]Checking Windows restart state...[/]");
+                scan.TempFreeGb = GetTempFreeGb();
                 scan.PendingReboot = TestPendingReboot();
                 scan.LongPathsEnabled = ReadRegistryDword(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "LongPathsEnabled") == 1;
 
@@ -180,18 +183,21 @@ internal static class Program
                 scan.OfficeProducts = office.Products;
 
                 ctx.Status("[cyan]Inspecting existing developer tools...[/]");
-                scan.PythonVersion = TryGetCommandVersion("python", "--version");
+                scan.PythonVersion = TryGetCommandVersion("python", "--version") ?? TryGetManagedVersion(@"C:\OfflineTools\Python\3.13.15\python.exe", "--version");
                 scan.NodeVersion = TryGetCommandVersion("node", "--version");
-                scan.GitVersion = TryGetCommandVersion("git", "--version");
-                scan.PowerShell7Version = TryGetCommandVersion("pwsh", "-NoLogo", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()");
+                scan.GitVersion = TryGetCommandVersion("git", "--version") ?? TryGetManagedVersion(@"C:\OfflineTools\Developer\Git\cmd\git.exe", "--version");
+                scan.PowerShell7Version = TryGetCommandVersion("pwsh", "-NoLogo", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()") ??
+                                         TryGetManagedVersion(@"C:\OfflineTools\Developer\PowerShell7\pwsh.exe", "-NoLogo", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()");
                 scan.VsCodeVersion = TryGetCommandVersion("code", "--version");
 
-                ctx.Status("[cyan]Checking local bundle control files...[/]");
+                ctx.Status("[cyan]Inspecting offline payload...[/]");
                 scan.BundleManifestPresent = File.Exists(Path.Combine(bundleRoot, "bundle-sha256.json"));
-                scan.BundleInfoPresent = File.Exists(Path.Combine(bundleRoot, "bundle-info.json"));
-                scan.NativeStatusPresent = File.Exists(Path.Combine(bundleRoot, "native-components.json"));
-                Thread.Sleep(200);
+                scan.SqlServerMediaPresent = File.Exists(Path.Combine(bundleRoot, "payload", "native", "sql-server-express", "setup.exe"));
+                scan.TesseractMediaPresent = File.Exists(Path.Combine(bundleRoot, "payload", "native", "tesseract", "tesseract-installer.exe"));
+                scan.ProfessionalUiPresent = File.Exists(Path.Combine(bundleRoot, "payload", "bootstrap", "OfflineToolsSetup.exe"));
+                Thread.Sleep(150);
             });
+
         return scan;
     }
 
@@ -202,100 +208,134 @@ internal static class Program
         table.AddColumn("[bold]Status[/]");
         table.AddColumn("[bold]Details[/]");
 
-        AddScanRow(table, "Windows", scan.IsWindows && scan.Is64Bit, $"{scan.WindowsName} • build {scan.WindowsBuild} • {(scan.Is64Bit ? "x64" : "unsupported architecture")}");
+        AddScanRow(table, "Windows", scan.IsWindows && scan.Is64Bit, $"{scan.WindowsName} • build {scan.WindowsBuild} • {(scan.Is64Bit ? "x64" : "unsupported")}");
         AddScanRow(table, "Administrator", scan.IsAdministrator, scan.IsAdministrator ? "Elevated session" : "Elevation required");
-        AddScanRow(table, "Disk", scan.FreeDiskGb >= 12, $"{scan.FreeDiskGb:0.0} GB free on system drive");
-        AddScanRow(table, "Restart", !scan.PendingReboot, scan.PendingReboot ? "Windows restart pending" : "No restart marker detected");
-        AddScanRow(table, "Long paths", scan.LongPathsEnabled, scan.LongPathsEnabled ? "Enabled" : "Disabled; setup can enable it");
-        AddScanRow(table, "Microsoft Office", scan.OfficeInstalled, scan.OfficeInstalled ? $"{scan.OfficeProducts} • {scan.OfficeArchitecture} • {scan.OfficeVersion}" : "Not detected; file-level automation still works");
+        AddScanRow(table, "System disk", scan.FreeDiskGb >= 12, $"{scan.FreeDiskGb:0.0} GB free");
+        AddScanRow(table, "Temporary disk", scan.TempFreeGb >= 4, $"{scan.TempFreeGb:0.0} GB free near TEMP");
+        AddScanRow(table, "Restart", !scan.PendingReboot, scan.PendingReboot ? "Restart pending" : "No restart marker detected");
+        AddScanRow(table, "Long paths", scan.LongPathsEnabled, scan.LongPathsEnabled ? "Enabled" : "Setup can enable it");
+        AddScanRow(table, "Microsoft Office", scan.OfficeInstalled, scan.OfficeInstalled ? $"{scan.OfficeProducts} • {scan.OfficeArchitecture} • {scan.OfficeVersion}" : "Desktop Office not detected; file automation still works");
         AddScanRow(table, "Python", !string.IsNullOrWhiteSpace(scan.PythonVersion), scan.PythonVersion ?? "Managed runtimes will be installed");
         AddScanRow(table, "Node.js", !string.IsNullOrWhiteSpace(scan.NodeVersion), scan.NodeVersion ?? "LTS runtime will be installed");
         AddScanRow(table, "Git", !string.IsNullOrWhiteSpace(scan.GitVersion), scan.GitVersion ?? "MinGit will be installed");
         AddScanRow(table, "PowerShell 7", !string.IsNullOrWhiteSpace(scan.PowerShell7Version), scan.PowerShell7Version ?? "Portable PowerShell 7 will be installed");
-        AddScanRow(table, "VS Code", !string.IsNullOrWhiteSpace(scan.VsCodeVersion), scan.VsCodeVersion?.Split('\n').FirstOrDefault() ?? "Portable VS Code will be installed");
-        AddScanRow(table, "Bundle manifest", scan.BundleManifestPresent, scan.BundleManifestPresent ? "Integrity manifest found" : "Final bundle manifest not found yet");
+        AddScanRow(table, "VS Code", !string.IsNullOrWhiteSpace(scan.VsCodeVersion), FirstLine(scan.VsCodeVersion) ?? "Portable VS Code will be installed");
+        AddScanRow(table, "Integrity manifest", scan.BundleManifestPresent, scan.BundleManifestPresent ? "Found" : "Final bundle manifest not found");
 
-        AnsiConsole.Write(new Panel(table).Header("  PREFLIGHT SCAN  ").Border(BoxBorder.Rounded));
+        AnsiConsole.Write(new Panel(table)
+        {
+            Header = new PanelHeader("  PREFLIGHT SCAN  "),
+            Border = BoxBorder.Rounded
+        });
+
+        if (!scan.SqlServerMediaPresent)
+            AnsiConsole.MarkupLine("[grey]Optional SQL Server Express media is not present and will not be selectable.[/]");
+        if (!scan.TesseractMediaPresent)
+            AnsiConsole.MarkupLine("[grey]Optional Tesseract media is not present and will not be selectable.[/]");
     }
 
     private static void AddScanRow(Table table, string name, bool good, string details)
     {
-        var icon = good ? "[green]● READY[/]" : "[yellow]● ACTION[/]";
-        table.AddRow(Markup.Escape(name), icon, Markup.Escape(details));
+        table.AddRow(Markup.Escape(name), good ? "[green]● READY[/]" : "[yellow]● ACTION[/]", Markup.Escape(details));
     }
 
     private static InstallSelection RunInteractiveSelection(SetupConfiguration config, PreflightScan scan)
     {
-        var menuChoices = new[]
-        {
-            "Recommended Professional Setup",
-            "Automation & Office Workstation",
-            "Full-Stack Development Workstation",
-            "Complete Workstation",
-            "Custom Selection",
-            "Diagnostics Only",
-            "Exit"
-        };
-
         var action = AnsiConsole.Prompt(new SelectionPrompt<string>()
             .Title("\n[bold cyan]Choose setup mode[/]")
             .PageSize(10)
             .HighlightStyle(new Style(Color.Black, Color.Cyan1, Decoration.Bold))
-            .AddChoices(menuChoices));
+            .AddChoices(
+                "Recommended Professional Setup",
+                "Automation & Office Workstation",
+                "Full-Stack Development Workstation",
+                "Complete Workstation",
+                "Custom Selection",
+                "Diagnostics Only",
+                "Exit"));
 
-        if (action == "Exit") return InstallSelection.Exit();
-        if (action == "Diagnostics Only")
+        return action switch
         {
-            RenderDiagnosticsFooter(scan);
-            return InstallSelection.Exit();
-        }
-        if (action == "Recommended Professional Setup") return BuildPresetSelection(config, "recommended", false);
-        if (action == "Automation & Office Workstation") return BuildPresetSelection(config, "automation", false);
-        if (action == "Full-Stack Development Workstation") return BuildPresetSelection(config, "webdev", false);
-        if (action == "Complete Workstation") return BuildPresetSelection(config, "complete", true);
+            "Recommended Professional Setup" => BuildPresetSelection(config, "recommended", false),
+            "Automation & Office Workstation" => BuildPresetSelection(config, "automation", false),
+            "Full-Stack Development Workstation" => BuildPresetSelection(config, "webdev", false),
+            "Complete Workstation" => BuildPresetSelection(config, "complete", true),
+            "Custom Selection" => BuildCustomSelection(config, scan),
+            "Diagnostics Only" => DiagnosticsAndExit(scan),
+            _ => InstallSelection.Exit()
+        };
+    }
 
-        var profilePrompt = new MultiSelectionPrompt<ProfileDefinition>()
+    private static InstallSelection DiagnosticsAndExit(PreflightScan scan)
+    {
+        RenderDiagnosticsFooter(scan);
+        return InstallSelection.Exit();
+    }
+
+    private static InstallSelection BuildCustomSelection(SetupConfiguration config, PreflightScan scan)
+    {
+        var prompt = new MultiSelectionPrompt<ProfileDefinition>()
             .Title("[bold cyan]Select professional profiles[/]")
             .InstructionsText("[grey](↑/↓ move, [cyan]<space>[/] toggle, [green]<enter>[/] confirm)[/]")
             .PageSize(12)
             .UseConverter(p => $"[bold]{Markup.Escape(p.DisplayName)}[/] [grey]- {Markup.Escape(p.Description)}[/]");
 
-        profilePrompt.AddChoices(config.Profiles);
+        prompt.AddChoices(config.Profiles);
         foreach (var profile in config.Profiles.Where(p => p.Recommended))
-            profilePrompt.Select(profile);
+            prompt.Select(profile);
 
-        var chosenProfiles = AnsiConsole.Prompt(profilePrompt);
+        var chosenProfiles = AnsiConsole.Prompt(prompt);
         var components = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var profile in chosenProfiles)
         {
-            var selectable = profile.Components.Where(c => c.Supported != false).ToList();
-            if (selectable.Count == 0) continue;
+            var available = profile.Components
+                .Where(c => c.Supported != false)
+                .Where(c => IsComponentAvailable(c, scan))
+                .ToList();
+
+            if (available.Count == 0)
+            {
+                components[profile.Id] = new List<string>();
+                continue;
+            }
 
             var componentPrompt = new MultiSelectionPrompt<ComponentDefinition>()
                 .Title($"[bold cyan]{Markup.Escape(profile.DisplayName)}[/] - choose components")
-                .InstructionsText("[grey](Space toggles optional components. Recommended items start selected.)[/]")
+                .InstructionsText("[grey](Space toggles; Enter confirms.)[/]")
                 .PageSize(15)
                 .NotRequired()
-                .UseConverter(c => $"{Markup.Escape(c.Name)}{(string.IsNullOrWhiteSpace(c.Description) ? "" : $" [grey]- {Markup.Escape(c.Description)}[/]")}");
-            componentPrompt.AddChoices(selectable);
-            foreach (var component in selectable.Where(c => c.SelectedByDefault))
+                .UseConverter(c => string.IsNullOrWhiteSpace(c.Description)
+                    ? Markup.Escape(c.Name)
+                    : $"{Markup.Escape(c.Name)} [grey]- {Markup.Escape(c.Description)}[/]");
+
+            componentPrompt.AddChoices(available);
+            foreach (var component in available.Where(c => c.SelectedByDefault))
                 componentPrompt.Select(component);
 
-            var selectedComponents = AnsiConsole.Prompt(componentPrompt).Select(c => c.Id).ToList();
-            components[profile.Id] = selectedComponents;
+            components[profile.Id] = AnsiConsole.Prompt(componentPrompt).Select(c => c.Id).ToList();
 
             foreach (var unsupported in profile.Components.Where(c => c.Supported == false))
-                AnsiConsole.MarkupLine($"[yellow]Skipped unsupported:[/] {Markup.Escape(unsupported.Name)} [grey]{Markup.Escape(unsupported.Reason ?? string.Empty)}[/]");
+                AnsiConsole.MarkupLine($"[yellow]Unavailable:[/] {Markup.Escape(unsupported.Name)} [grey]{Markup.Escape(unsupported.Reason ?? string.Empty)}[/]");
         }
 
         return BuildSelection(config, chosenProfiles.Select(p => p.Id).ToList(), components);
+    }
+
+    private static bool IsComponentAvailable(ComponentDefinition component, PreflightScan scan)
+    {
+        if (component.Id.Equals("tesseract", StringComparison.OrdinalIgnoreCase))
+            return scan.TesseractMediaPresent;
+        if (component.Id.Equals("sql-server-express", StringComparison.OrdinalIgnoreCase))
+            return scan.SqlServerMediaPresent;
+        return true;
     }
 
     private static InstallSelection BuildPresetSelection(SetupConfiguration config, string presetId, bool includeAllSupportedComponents)
     {
         var preset = config.Presets.FirstOrDefault(p => p.Id.Equals(presetId, StringComparison.OrdinalIgnoreCase))
                      ?? throw new InvalidOperationException($"Unknown preset: {presetId}");
+
         var components = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var profileId in preset.Profiles)
         {
@@ -312,22 +352,20 @@ internal static class Program
     {
         var selectedProfiles = config.Profiles.Where(p => profileIds.Contains(p.Id, StringComparer.OrdinalIgnoreCase)).ToList();
         var packageProfiles = new HashSet<string>(config.Core.PythonRequirementProfiles, StringComparer.OrdinalIgnoreCase);
-        foreach (var p in selectedProfiles)
-            foreach (var req in p.PythonRequirementProfiles)
-                packageProfiles.Add(req);
+        foreach (var profile in selectedProfiles)
+            foreach (var requirement in profile.PythonRequirementProfiles)
+                packageProfiles.Add(requirement);
 
-        var allComponentIds = components.Values.SelectMany(x => x).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var estimate = config.Core.EstimatedMb + selectedProfiles.Sum(p => p.EstimatedMb);
-
+        var allComponents = components.Values.SelectMany(v => v).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return new InstallSelection
         {
             ProfileIds = selectedProfiles.Select(p => p.Id).ToList(),
             Components = components,
             PythonRequirementProfiles = packageProfiles.ToList(),
-            IncludeTesseract = allComponentIds.Contains("tesseract"),
-            IncludeSqlServerExpress = allComponentIds.Contains("sql-server-express"),
+            IncludeTesseract = allComponents.Contains("tesseract"),
+            IncludeSqlServerExpress = allComponents.Contains("sql-server-express"),
             InstallAiTools = profileIds.Contains("ai-dev", StringComparer.OrdinalIgnoreCase),
-            EstimatedMb = estimate
+            EstimatedMb = config.Core.EstimatedMb + selectedProfiles.Sum(p => p.EstimatedMb)
         };
     }
 
@@ -342,35 +380,39 @@ internal static class Program
         foreach (var id in selection.ProfileIds)
         {
             var profile = config.Profiles.First(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
-            var count = selection.Components.TryGetValue(id, out var list) ? list.Count : 0;
-            table.AddRow("Profile", Markup.Escape(profile.DisplayName), $"[green]Install / repair[/] [grey]({count} components selected)[/]");
+            var count = selection.Components.TryGetValue(id, out var selected) ? selected.Count : 0;
+            table.AddRow("Profile", Markup.Escape(profile.DisplayName), $"[green]Install / repair[/] [grey]({count} components)[/]");
         }
 
         if (selection.IncludeTesseract)
-            table.AddRow("Native", "Tesseract OCR", "[yellow]Install if approved media is present[/]");
+            table.AddRow("Native", "Tesseract OCR", "[yellow]Install from approved local media[/]");
         if (selection.IncludeSqlServerExpress)
-            table.AddRow("Native", "SQL Server Express", "[yellow]Install if full offline media is present[/]");
+            table.AddRow("Native", "SQL Server Express", "[yellow]Install from complete local media[/]");
 
-        var requiredGb = Math.Ceiling((selection.EstimatedMb / 1024d) * 1.25 + 2);
-        var footer = $"Estimated installed footprint: ~{selection.EstimatedMb / 1024d:0.0} GB  •  Safe free-space target: {requiredGb:0} GB  •  Current free: {scan.FreeDiskGb:0.0} GB";
-        AnsiConsole.Write(new Panel(table)
-            .Header("  INSTALLATION PLAN  ")
-            .Footer(new PanelHeader(Markup.Escape(footer)))
-            .Border(BoxBorder.Double));
+        var panel = new Panel(table)
+        {
+            Header = new PanelHeader("  INSTALLATION PLAN  "),
+            Border = BoxBorder.Double
+        };
+        AnsiConsole.Write(panel);
+
+        var safeGb = Math.Ceiling((selection.EstimatedMb / 1024d) * 1.25 + 2);
+        AnsiConsole.MarkupLine($"[grey]Estimated footprint:[/] [white]~{selection.EstimatedMb / 1024d:0.0} GB[/]  [grey]Safe free-space target:[/] [white]{safeGb:0} GB[/]  [grey]Current free:[/] [white]{scan.FreeDiskGb:0.0} GB[/]");
     }
 
     private static bool HasEnoughDisk(PreflightScan scan, long estimatedMb)
     {
         var requiredGb = (estimatedMb / 1024d) * 1.25 + 2;
-        return scan.FreeDiskGb >= requiredGb;
+        return scan.FreeDiskGb >= requiredGb && scan.TempFreeGb >= 2;
     }
 
     private static string WritePlan(string bundleRoot, InstallSelection selection, PreflightScan scan)
     {
-        var planDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "OfflineToolsSetup", "plans");
-        Directory.CreateDirectory(planDir);
-        var planPath = Path.Combine(planDir, $"plan-{DateTime.Now:yyyyMMdd-HHmmss}.json");
-        var payload = new InstallationPlan
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "OfflineToolsSetup", "plans");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"plan-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+
+        var plan = new InstallationPlan
         {
             SchemaVersion = 1,
             CreatedAtUtc = DateTime.UtcNow,
@@ -384,8 +426,9 @@ internal static class Program
             InstallAiTools = selection.InstallAiTools,
             Scan = scan
         };
-        File.WriteAllText(planPath, JsonSerializer.Serialize(payload, JsonOptions()), new UTF8Encoding(false));
-        return planPath;
+
+        File.WriteAllText(path, JsonSerializer.Serialize(plan, JsonOptions()), new UTF8Encoding(false));
+        return path;
     }
 
     private static int RunInstaller(string bundleRoot, string planPath)
@@ -396,9 +439,9 @@ internal static class Program
 
         var bundledPwsh = Path.Combine(bundleRoot, "payload", "developer", "powershell", "pwsh.exe");
         var shell = File.Exists(bundledPwsh) ? bundledPwsh : "powershell.exe";
-        var args = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File \"{script}\" -PlanPath \"{planPath}\" -BundleRoot \"{bundleRoot}\"";
+        var arguments = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -File \"{script}\" -PlanPath \"{planPath}\" -BundleRoot \"{bundleRoot}\"";
 
-        var psi = new ProcessStartInfo(shell, args)
+        var start = new ProcessStartInfo(shell, arguments)
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -407,9 +450,9 @@ internal static class Program
             WorkingDirectory = bundleRoot
         };
 
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Installer process could not be started.");
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Installer process could not be started.");
         var errors = new List<string>();
-        var finalExit = 1;
+        var exitCode = 1;
 
         AnsiConsole.Progress()
             .AutoClear(false)
@@ -418,47 +461,52 @@ internal static class Program
             .Start(ctx =>
             {
                 var task = ctx.AddTask("[cyan]Preparing installation[/]", maxValue: 100);
-                while (!process.StandardOutput.EndOfStream)
+                string? line;
+                while ((line = process.StandardOutput.ReadLine()) is not null)
                 {
-                    var line = process.StandardOutput.ReadLine();
-                    if (line is null) continue;
-                    if (line.StartsWith("@@EVENT|", StringComparison.Ordinal))
+                    if (!line.StartsWith("@@EVENT|", StringComparison.Ordinal))
+                        continue;
+
+                    var parts = line.Split('|', 3);
+                    if (parts.Length == 3 && double.TryParse(parts[1], out var percent))
                     {
-                        var parts = line.Split('|', 3);
-                        if (parts.Length == 3 && double.TryParse(parts[1], out var value))
-                        {
-                            task.Value = Math.Clamp(value, 0, 100);
-                            task.Description = $"[cyan]{Markup.Escape(parts[2])}[/]";
-                        }
+                        task.Value = Math.Clamp(percent, 0, 100);
+                        task.Description = $"[cyan]{Markup.Escape(parts[2])}[/]";
                     }
                 }
+
                 process.WaitForExit();
                 var stderr = process.StandardError.ReadToEnd();
                 if (!string.IsNullOrWhiteSpace(stderr)) errors.Add(stderr.Trim());
-                finalExit = process.ExitCode;
-                if (finalExit == 0)
+                exitCode = process.ExitCode;
+
+                if (exitCode == 0)
                 {
                     task.Value = 100;
                     task.Description = "[green]Installation completed[/]";
                 }
                 else
                 {
-                    task.Description = $"[red]Installation failed (code {finalExit})[/]";
+                    task.Description = $"[red]Installation failed (code {exitCode})[/]";
                 }
             });
 
-        if (finalExit == 0)
+        if (exitCode == 0)
         {
-            AnsiConsole.Write(new Panel("[green bold]Setup completed successfully.[/]\nOpen a new terminal before using newly added command paths.")
-                .Header("  COMPLETE  ").Border(BoxBorder.Double));
+            AnsiConsole.Write(new Panel("[green bold]Setup completed successfully.[/]\nOpen a new terminal before using newly installed command paths.")
+            {
+                Header = new PanelHeader("  COMPLETE  "),
+                Border = BoxBorder.Double
+            });
         }
         else
         {
-            AnsiConsole.MarkupLine($"\n[red bold]Installation ended with code {finalExit}.[/]");
-            foreach (var error in errors.Take(5)) AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
+            AnsiConsole.MarkupLine($"\n[red bold]Installation ended with code {exitCode}.[/]");
+            foreach (var error in errors.Take(5))
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(error)}[/]");
         }
 
-        return finalExit;
+        return exitCode;
     }
 
     private static void RenderDiagnosticsFooter(PreflightScan scan)
@@ -484,6 +532,18 @@ internal static class Program
                || ReadRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager", "PendingFileRenameOperations") is not null;
     }
 
+    private static double GetTempFreeGb()
+    {
+        try
+        {
+            var temp = Path.GetTempPath();
+            var root = Path.GetPathRoot(temp);
+            if (string.IsNullOrWhiteSpace(root)) return 0;
+            return Math.Round(new DriveInfo(root).AvailableFreeSpace / 1024d / 1024d / 1024d, 1);
+        }
+        catch { return 0; }
+    }
+
     private static OfficeInfo DetectOffice()
     {
         var result = new OfficeInfo();
@@ -506,37 +566,47 @@ internal static class Program
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
             using var uninstall = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
             if (uninstall is null) continue;
-            foreach (var subName in uninstall.GetSubKeyNames())
+            foreach (var name in uninstall.GetSubKeyNames())
             {
-                using var sub = uninstall.OpenSubKey(subName);
-                var name = sub?.GetValue("DisplayName")?.ToString();
-                if (name is null) continue;
-                if (name.Contains("Microsoft 365", StringComparison.OrdinalIgnoreCase) || name.Contains("Microsoft Office", StringComparison.OrdinalIgnoreCase))
-                {
-                    result.Installed = true;
-                    result.Products = name;
-                    result.Version = sub?.GetValue("DisplayVersion")?.ToString();
-                    result.Architecture = view == RegistryView.Registry64 ? "x64 registry" : "x86 registry";
-                    return result;
-                }
+                using var item = uninstall.OpenSubKey(name);
+                var displayName = item?.GetValue("DisplayName")?.ToString();
+                if (displayName is null) continue;
+                if (!displayName.Contains("Microsoft 365", StringComparison.OrdinalIgnoreCase) &&
+                    !displayName.Contains("Microsoft Office", StringComparison.OrdinalIgnoreCase)) continue;
+                result.Installed = true;
+                result.Products = displayName;
+                result.Version = item?.GetValue("DisplayVersion")?.ToString();
+                result.Architecture = view == RegistryView.Registry64 ? "x64 registry" : "x86 registry";
+                return result;
             }
         }
         return result;
     }
 
+    private static string? TryGetManagedVersion(string executable, params string[] arguments)
+    {
+        return File.Exists(executable) ? TryGetExecutableVersion(executable, arguments) : null;
+    }
+
     private static string? TryGetCommandVersion(string command, params string[] arguments)
+    {
+        return TryGetExecutableVersion(command, arguments);
+    }
+
+    private static string? TryGetExecutableVersion(string executable, params string[] arguments)
     {
         try
         {
-            var psi = new ProcessStartInfo(command)
+            var start = new ProcessStartInfo(executable)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
-            foreach (var arg in arguments) psi.ArgumentList.Add(arg);
-            using var process = Process.Start(psi);
+            foreach (var arg in arguments) start.ArgumentList.Add(arg);
+
+            using var process = Process.Start(start);
             if (process is null) return null;
             if (!process.WaitForExit(2200))
             {
@@ -547,6 +617,12 @@ internal static class Program
             return process.ExitCode == 0 && !string.IsNullOrWhiteSpace(text) ? text : null;
         }
         catch { return null; }
+    }
+
+    private static string? FirstLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        return text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
     }
 
     private static bool RegistryKeyExists(RegistryKey root, string path)
@@ -629,6 +705,7 @@ internal sealed class PreflightScan
     public string? WindowsName { get; set; }
     public string? WindowsBuild { get; set; }
     public double FreeDiskGb { get; set; }
+    public double TempFreeGb { get; set; }
     public bool PendingReboot { get; set; }
     public bool LongPathsEnabled { get; set; }
     public bool OfficeInstalled { get; set; }
@@ -641,8 +718,9 @@ internal sealed class PreflightScan
     public string? PowerShell7Version { get; set; }
     public string? VsCodeVersion { get; set; }
     public bool BundleManifestPresent { get; set; }
-    public bool BundleInfoPresent { get; set; }
-    public bool NativeStatusPresent { get; set; }
+    public bool SqlServerMediaPresent { get; set; }
+    public bool TesseractMediaPresent { get; set; }
+    public bool ProfessionalUiPresent { get; set; }
 }
 
 internal sealed class OfficeInfo
@@ -696,11 +774,21 @@ internal sealed class CommandLineOptions
         {
             switch (args[i].ToLowerInvariant())
             {
-                case "--bundle-root" when i + 1 < args.Length: result.BundleRoot = args[++i]; break;
-                case "--preset" when i + 1 < args.Length: result.Preset = args[++i]; break;
-                case "--diagnostics": result.DiagnosticsOnly = true; break;
-                case "--plan-only": result.PlanOnly = true; break;
-                case "--non-interactive": result.NonInteractive = true; break;
+                case "--bundle-root" when i + 1 < args.Length:
+                    result.BundleRoot = args[++i];
+                    break;
+                case "--preset" when i + 1 < args.Length:
+                    result.Preset = args[++i];
+                    break;
+                case "--diagnostics":
+                    result.DiagnosticsOnly = true;
+                    break;
+                case "--plan-only":
+                    result.PlanOnly = true;
+                    break;
+                case "--non-interactive":
+                    result.NonInteractive = true;
+                    break;
             }
         }
         return result;
