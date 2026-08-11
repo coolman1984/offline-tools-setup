@@ -23,6 +23,25 @@ function Invoke-Setup([string]$FilePath,[object[]]$Arguments,[string]$Name,[int[
     if ($Proc.ExitCode -in 1641,3010) { Set-RebootRequired "$Name returned $($Proc.ExitCode)" }
     if ($SuccessCodes -notcontains $Proc.ExitCode) { throw "$Name failed with exit code $($Proc.ExitCode)" }
 }
+function Get-DirectorySize([string]$Path) {
+    if (-not (Test-Path $Path)) { return [int64]0 }
+    $sum = (Get-ChildItem $Path -File -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $sum) { return [int64]0 }
+    return [int64]$sum
+}
+function Assert-StagingCapacity([string]$Source,[string]$TargetRoot) {
+    $sourceBytes = Get-DirectorySize $Source
+    $root = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetFullPath($TargetRoot))
+    $drive = New-Object System.IO.DriveInfo($root)
+    # Retain one local copy of the layout and keep a generous additional reserve for the installed toolchain,
+    # package extraction and servicing operations.
+    $reserveBytes = [int64](10GB)
+    $requiredBytes = $sourceBytes + $reserveBytes
+    if ($drive.AvailableFreeSpace -lt $requiredBytes) {
+        throw ("Native Build Toolchain needs at least {0:N1} GB free before staging; only {1:N1} GB is available." -f ($requiredBytes/1GB),($drive.AvailableFreeSpace/1GB))
+    }
+    Write-Host ("Native build media: {0:N1} GB. Free space: {1:N1} GB. Minimum safe staging target: {2:N1} GB." -f ($sourceBytes/1GB),($drive.AvailableFreeSpace/1GB),($requiredBytes/1GB))
+}
 
 if (-not (Test-IsAdministrator)) { throw 'Native build toolchain installation requires Administrator rights.' }
 $Manifest = Get-Content (Join-Path $BundleRoot 'config\tool-manifest.json') -Raw | ConvertFrom-Json
@@ -53,6 +72,7 @@ if (-not (Test-Path $BundleBuildToolsSetup)) {
 $BuildToolsRoot = Join-Path $ManagedMediaRoot 'vs-build-tools'
 $BuildToolsSetup = Join-Path $BuildToolsRoot ([string]$Manifest.microsoft.visualStudioBuildTools.requiredSetupFile)
 if (-not (Test-Path $BuildToolsSetup)) {
+    Assert-StagingCapacity -Source $BundleBuildToolsRoot -TargetRoot $InstallRoot
     Remove-Item $BuildToolsRoot -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $BuildToolsRoot | Out-Null
     Copy-Item (Join-Path $BundleBuildToolsRoot '*') $BuildToolsRoot -Recurse -Force
