@@ -86,7 +86,7 @@ $TesseractIncluded = $false
 $BuildToolsIncluded = $false
 $WebView2Included = $false
 $NetFx35SourceIncluded = $false
-$WindowsRepairBuilds = @()
+$WindowsRepairProfiles = @()
 
 $SqlSource = Join-Path $NativeSourceDir 'sql-server-express'
 $SqlDestination = Join-Path $OutputDir ([string]$Manifest.microsoft.sqlServerExpress.offlineMediaRelativePath)
@@ -133,24 +133,36 @@ if (Test-Path $NetFxSource) {
     $NetFx35SourceIncluded = $true
 }
 
-# Optional Windows repair sources are deliberately keyed by exact Windows build.
-# Expected builder layout: native-source\windows-repair\<build>\Windows\...
+# Windows repair source profiles must be prepared by Prepare-WindowsRepairSource.ps1.
+# Each profile contains source-metadata.json plus an expanded Windows directory.
 $WindowsRepairSource = Join-Path $NativeSourceDir 'windows-repair'
 $WindowsRepairDestination = Join-Path $OutputDir 'payload\windows-repair'
 if (Test-Path $WindowsRepairSource) {
     New-Item -ItemType Directory -Force -Path $WindowsRepairDestination | Out-Null
-    foreach ($buildDir in Get-ChildItem $WindowsRepairSource -Directory -ErrorAction SilentlyContinue) {
-        $windowsDir = Join-Path $buildDir.FullName 'Windows'
-        if (-not (Test-Path (Join-Path $windowsDir 'System32'))) {
-            Write-Warning "Skipping Windows repair source without an expanded Windows\System32 tree: $($buildDir.FullName)"
+    foreach ($profileDir in Get-ChildItem $WindowsRepairSource -Directory -ErrorAction SilentlyContinue) {
+        $metadataPath = Join-Path $profileDir.FullName 'source-metadata.json'
+        $windowsDir = Join-Path $profileDir.FullName 'Windows'
+        if (-not (Test-Path $metadataPath) -or -not (Test-Path (Join-Path $windowsDir 'System32'))) {
+            Write-Warning "Skipping unverified Windows repair profile: $($profileDir.FullName)"
             continue
         }
-        $target = Join-Path $WindowsRepairDestination $buildDir.Name
+        try {
+            $meta = Get-Content $metadataPath -Raw | ConvertFrom-Json
+            if ([int]$meta.build -le 0 -or [int]$meta.ubr -lt 0 -or -not $meta.architecture) { throw 'Invalid metadata' }
+        } catch {
+            Write-Warning "Skipping Windows repair profile with invalid metadata: $metadataPath"
+            continue
+        }
+        $target = Join-Path $WindowsRepairDestination $profileDir.Name
         Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force -Path $target | Out-Null
-        Copy-Item $windowsDir (Join-Path $target 'Windows') -Recurse -Force
-        $WindowsRepairBuilds += $buildDir.Name
-        Write-Host "Included exact-build Windows repair source: $($buildDir.Name)" -ForegroundColor Green
+        Copy-Item $profileDir.FullName $target -Recurse -Force
+        $WindowsRepairProfiles += [pscustomobject]@{
+            id = $profileDir.Name
+            fullBuild = "$($meta.build).$($meta.ubr)"
+            architecture = [string]$meta.architecture
+            languages = @($meta.languages)
+        }
+        Write-Host "Included verified Windows repair profile: $($profileDir.Name)" -ForegroundColor Green
     }
 }
 
@@ -188,7 +200,7 @@ $NativeStatus = [pscustomobject]@{
     visualStudioBuildToolsMedia = $BuildToolsIncluded
     webView2 = $WebView2Included
     netFramework35MatchingWindowsMedia = $NetFx35SourceIncluded
-    windowsRepairBuilds = @($WindowsRepairBuilds)
+    windowsRepairProfiles = @($WindowsRepairProfiles)
     developerStack = $true
     professionalSetupUi = $true
     tabbedSuiteShell = $true
@@ -199,7 +211,7 @@ $NativeStatus = [pscustomobject]@{
     aiServiceNetworkOnly = $true
     localGenerativeAiModels = $false
 }
-$NativeStatus | ConvertTo-Json | Set-Content (Join-Path $OutputDir 'native-components.json') -Encoding UTF8
+$NativeStatus | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $OutputDir 'native-components.json') -Encoding UTF8
 
 Write-Step 'Removing Mark-of-the-Web from trusted builder-created bundle files when present'
 Get-ChildItem $OutputDir -File -Recurse | ForEach-Object {
@@ -226,4 +238,4 @@ if ($CreateZip) {
 
 Write-Host "`nComplete professional offline bundle ready: $OutputDir" -ForegroundColor Green
 Write-Host 'Target installation performs zero software/package/extension downloads.' -ForegroundColor Green
-Write-Host 'Windows repair operations use only exact-build local repair media when supplied.' -ForegroundColor Green
+Write-Host 'Windows repair operations use only metadata-verified matching local repair media when supplied.' -ForegroundColor Green
