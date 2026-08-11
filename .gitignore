@@ -1,0 +1,14 @@
+offline-bundle/
+build/
+work/
+*.log
+*.zip
+*.iso
+*.exe
+*.msi
+*.msix
+*.cab
+*.whl
+*.tgz
+npm-cache/
+wheelhouse/
