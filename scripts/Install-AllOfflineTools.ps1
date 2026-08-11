@@ -32,5 +32,10 @@ Write-Host '`nInstalling Python, packages, Node.js and offline development envir
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $BundleRoot 'scripts\Install-OfflineTools.ps1') -InstallRoot $InstallRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+Write-Host '`nInstalling VS Code, pre-bundled extensions, Git, Gitea and AI/developer CLIs...' -ForegroundColor Cyan
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $BundleRoot 'scripts\Install-DeveloperStack.ps1') -InstallRoot $InstallRoot -BundleRoot $BundleRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 Write-Host '`nALL OFFLINE TOOLS SETUP COMPLETED SUCCESSFULLY.' -ForegroundColor Green
+Write-Host 'No local AI models were installed. No target-side downloads are required.' -ForegroundColor Green
 exit 0
