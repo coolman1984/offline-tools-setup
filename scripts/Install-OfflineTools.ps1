@@ -8,6 +8,36 @@ $ProgressPreference = 'SilentlyContinue'
 
 $BundleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Manifest = Get-Content (Join-Path $BundleRoot 'config\tool-manifest.json') -Raw | ConvertFrom-Json
+
+function Test-IsAdministrator {
+    $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $Principal = New-Object Security.Principal.WindowsPrincipal($Identity)
+    return $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if ($env:OS -ne 'Windows_NT') {
+    Write-Host 'This installer only supports Windows.' -ForegroundColor Red
+    exit 2
+}
+
+if ([Environment]::Is64BitOperatingSystem -ne $true) {
+    Write-Host 'This bundle currently supports Windows x64 only.' -ForegroundColor Red
+    exit 3
+}
+
+$OsCaption = (Get-CimInstance Win32_OperatingSystem).Caption
+if ($OsCaption -notmatch 'Windows 10|Windows 11') {
+    Write-Host "Unsupported operating system: $OsCaption" -ForegroundColor Red
+    exit 4
+}
+
+if (-not (Test-IsAdministrator)) {
+    Write-Host 'Requesting administrator rights...'
+    $Args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'-InstallRoot',"`"$InstallRoot`"")
+    Start-Process powershell.exe -Verb RunAs -ArgumentList $Args
+    exit 0
+}
+
 $LogDir = Join-Path $InstallRoot 'logs'
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $LogFile = Join-Path $LogDir ("install-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -21,33 +51,6 @@ function Stop-WithError([string]$Message, [int]$Code = 1) {
 
 function Write-Step([string]$Message) {
     Write-Host "`n==> $Message" -ForegroundColor Cyan
-}
-
-function Test-IsAdministrator {
-    $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $Principal = New-Object Security.Principal.WindowsPrincipal($Identity)
-    return $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-if (-not $IsWindows) {
-    Stop-WithError 'This installer only supports Windows.' 2
-}
-
-if ([Environment]::Is64BitOperatingSystem -ne $true) {
-    Stop-WithError 'This bundle currently supports Windows x64 only.' 3
-}
-
-$OsCaption = (Get-CimInstance Win32_OperatingSystem).Caption
-if ($OsCaption -notmatch 'Windows 10|Windows 11') {
-    Stop-WithError "Unsupported operating system: $OsCaption" 4
-}
-
-if (-not (Test-IsAdministrator)) {
-    Write-Host 'Requesting administrator rights...'
-    $Args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'-InstallRoot',"`"$InstallRoot`"")
-    Start-Process powershell.exe -Verb RunAs -ArgumentList $Args
-    Stop-Transcript | Out-Null
-    exit 0
 }
 
 Write-Step 'Verifying offline bundle integrity before installation'
