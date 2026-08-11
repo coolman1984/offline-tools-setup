@@ -112,13 +112,13 @@ SHOW_FOOTER_VERSION = true
 SHOW_FOOTER_TEMPLATE_LOAD_TIME = false
 "@
 $AppIni | Set-Content $GiteaConfig -Encoding UTF8
-& $GiteaExe migrate --config $GiteaConfig
+& $GiteaExe --work-path $GiteaRoot --config $GiteaConfig migrate
 if ($LASTEXITCODE -ne 0) { throw 'Gitea database migration failed.' }
 
 $AdminMarker = Join-Path $GiteaRoot 'FIRST-LOGIN.txt'
 if (-not (Test-Path $AdminMarker)) {
     $Password = ([guid]::NewGuid().ToString('N').Substring(0,20) + '!Aa9')
-    & $GiteaExe admin user create --config $GiteaConfig --username offline-admin --password $Password --email offline-admin@localhost --admin --must-change-password
+    & $GiteaExe --work-path $GiteaRoot --config $GiteaConfig admin user create --username offline-admin --password $Password --email offline-admin@localhost --admin --must-change-password
     if ($LASTEXITCODE -eq 0) {
         @"
 Offline Development Hub
@@ -135,7 +135,7 @@ Change this password on first login.
 $ServiceName = 'OfflineDevelopmentHub'
 $ExistingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $ExistingService) {
-    $BinaryPath = ('"{0}" web --config "{1}"' -f $GiteaExe,$GiteaConfig)
+    $BinaryPath = ('"{0}" --work-path "{1}" --config "{2}" web' -f $GiteaExe,$GiteaRoot,$GiteaConfig)
     New-Service -Name $ServiceName -BinaryPathName $BinaryPath -DisplayName 'Offline Development Hub' -StartupType Automatic | Out-Null
 }
 Start-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -163,4 +163,5 @@ foreach ($Command in @('codex.cmd','claude.cmd','cline.cmd','kilo.cmd','opencode
 
 Write-Host '`nOFFLINE DEVELOPER STACK INSTALLED.' -ForegroundColor Green
 Write-Host 'No models were installed. No package/extension downloads are required on the target PC.' -ForegroundColor Green
+Write-Host 'Network access is only needed later for approved AI authentication and inference endpoints.' -ForegroundColor Green
 Write-Host 'Open a new terminal before using the new PATH entries.' -ForegroundColor Green
