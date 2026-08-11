@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "target": {
     "os": ["Windows 10", "Windows 11"],
     "architecture": "x64",
@@ -43,12 +43,47 @@
     "msiFile": "node-v24.19.0-x64.msi",
     "zipUrl": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-win-x64.zip",
     "zipFile": "node-v24.19.0-win-x64.zip",
+    "headersUrl": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-headers.tar.gz",
+    "headersFile": "node-v24.19.0-headers.tar.gz",
     "shasumsUrl": "https://nodejs.org/dist/v24.19.0/SHASUMS256.txt"
   },
   "microsoft": {
-    "visualCppRuntime": {
-      "file": "vc_redist.x64.exe",
-      "url": "https://aka.ms/vc14/vc_redist.x64.exe"
+    "visualCppRuntimes": [
+      {
+        "architecture": "x64",
+        "file": "vc_redist.x64.exe",
+        "url": "https://aka.ms/vc14/vc_redist.x64.exe"
+      },
+      {
+        "architecture": "x86",
+        "file": "vc_redist.x86.exe",
+        "url": "https://aka.ms/vc14/vc_redist.x86.exe"
+      }
+    ],
+    "dotnetSdk": {
+      "version": "10.0.302",
+      "runtimeVersion": "10.0.10",
+      "channel": "10.0-lts",
+      "file": "dotnet-sdk-10.0.302-win-x64.exe",
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.302/dotnet-sdk-10.0.302-win-x64.exe",
+      "optional": true
+    },
+    "visualStudioBuildTools": {
+      "workload": "Microsoft.VisualStudio.Workload.VCTools",
+      "includeRecommended": true,
+      "offlineMediaRelativePath": "payload/native/vs-build-tools",
+      "requiredSetupFile": "vs_BuildTools.exe",
+      "optional": true,
+      "layoutPathMaxLength": 80
+    },
+    "webView2": {
+      "offlineInstallerRelativePath": "payload/native/webview2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+      "optional": true
+    },
+    "netFramework35": {
+      "optional": true,
+      "windows10SourceRelativePath": "payload/native/windows-sxs",
+      "note": "Windows 10 requires matching Windows installation media CAB files. Never use CAB files from another Windows build."
     },
     "sqlOdbc": {
       "version": "18.6.2.1",
@@ -73,10 +108,11 @@
   },
   "profiles": {
     "recommended": ["core", "data", "office", "pdf", "ocr-basic", "databases", "web-backend", "testing"],
-    "optional": ["ocr-heavy", "tesseract", "sql-server", "web-fullstack"]
+    "optional": ["ocr-heavy", "tesseract", "sql-server", "web-fullstack", "native-build"]
   },
   "installation": {
     "root": "C:\\OfflineTools",
+    "singleMachinePathEntry": "C:\\OfflineTools\\bin",
     "fullPythonEnvironment": "3.13.15",
     "compatibilityEnvironments": ["3.11.9", "3.12.10", "3.14.7"]
   }
