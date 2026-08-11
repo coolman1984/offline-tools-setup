@@ -45,14 +45,21 @@ Expand-Archive -Path $VsCodeZip -DestinationPath $VsCodePayload -Force
 $CodeCmd = Join-Path $VsCodePayload 'bin\code.cmd'
 if (-not (Test-Path $CodeCmd)) { throw 'VS Code portable command was not found after extraction.' }
 
-Write-Step 'Pre-installing VS Code extensions while internet is available'
-$ExtensionPayload = Join-Path $DevRoot 'vscode-extensions'
+Write-Step 'Pre-installing separable VS Code extension payloads'
 $VsCodeUserData = Join-Path $WorkRoot 'vscode-user-data'
-New-Item -ItemType Directory -Force -Path $ExtensionPayload,$VsCodeUserData | Out-Null
-foreach ($Extension in $Config.vscodeExtensions) {
-    Write-Host "Installing extension into bundle: $Extension"
-    & $CodeCmd --user-data-dir $VsCodeUserData --extensions-dir $ExtensionPayload --install-extension $Extension --force
-    if ($LASTEXITCODE -ne 0) { throw "VS Code extension bundle failed: $Extension" }
+New-Item -ItemType Directory -Force -Path $VsCodeUserData | Out-Null
+$ExtensionGroups = @(
+    @{ Name = 'core'; Path = (Join-Path $DevRoot 'vscode-extensions-core'); Extensions = @($Config.vscodeExtensionsCore) },
+    @{ Name = 'ai'; Path = (Join-Path $DevRoot 'vscode-extensions-ai'); Extensions = @($Config.vscodeExtensionsAi) }
+)
+foreach ($Group in $ExtensionGroups) {
+    Remove-Item $Group.Path -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $Group.Path | Out-Null
+    foreach ($Extension in $Group.Extensions) {
+        Write-Host "Installing $($Group.Name) extension into bundle: $Extension"
+        & $CodeCmd --user-data-dir $VsCodeUserData --extensions-dir $Group.Path --install-extension $Extension --force
+        if ($LASTEXITCODE -ne 0) { throw "VS Code extension bundle failed: $Extension" }
+    }
 }
 
 Write-Step 'Preparing MinGit for native Windows command shells'
@@ -67,12 +74,12 @@ New-Item -ItemType Directory -Force -Path $GitPayload | Out-Null
 Expand-Archive -Path $GitZip -DestinationPath $GitPayload -Force
 if (-not (Test-Path (Join-Path $GitPayload 'cmd\git.exe'))) { throw 'MinGit executable was not found.' }
 
-Write-Step 'Preparing Gitea local GitHub-like server'
+Write-Step 'Preparing Gitea local development hub'
 $GiteaPayload = Join-Path $DevRoot 'gitea'
 New-Item -ItemType Directory -Force -Path $GiteaPayload | Out-Null
 Get-RemoteFile $Config.core.gitea.url (Join-Path $GiteaPayload 'gitea.exe')
 
-Write-Step 'Preparing complete AI and developer CLI prefix'
+Write-Step 'Preparing portable Node runtime for CLI packaging'
 $NodeZip = Join-Path $BundleRoot ("payload\installers\node\{0}" -f $ToolManifest.node.zipFile)
 if (-not (Test-Path $NodeZip)) { throw "Node portable archive is missing: $NodeZip" }
 $PortableNodeRoot = Join-Path $WorkRoot 'node'
@@ -81,13 +88,24 @@ $NodeFolder = Get-ChildItem $PortableNodeRoot -Directory | Select-Object -First 
 if (-not $NodeFolder) { throw 'Portable Node.js directory not found.' }
 $NpmCmd = Join-Path $NodeFolder.FullName 'npm.cmd'
 $env:PATH = $NodeFolder.FullName + ';' + $env:PATH
-$CliPayload = Join-Path $DevRoot 'cli'
-New-Item -ItemType Directory -Force -Path $CliPayload | Out-Null
-$Packages = @()
-foreach ($Item in $Config.aiCli) { if ($Item.supported -eq $true) { $Packages += [string]$Item.package } }
-foreach ($Item in $Config.nodeCli) { $Packages += [string]$Item }
-& $NpmCmd install --global --prefix $CliPayload --no-audit --no-fund @Packages
-if ($LASTEXITCODE -ne 0) { throw 'Developer CLI staging failed.' }
+
+Write-Step 'Preparing core developer CLI payload'
+$CoreCliPayload = Join-Path $DevRoot 'cli-core'
+Remove-Item $CoreCliPayload -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $CoreCliPayload | Out-Null
+$CorePackages = @($Config.nodeCli | ForEach-Object { [string]$_ })
+& $NpmCmd install --global --prefix $CoreCliPayload --no-audit --no-fund @CorePackages
+if ($LASTEXITCODE -ne 0) { throw 'Core developer CLI staging failed.' }
+
+Write-Step 'Preparing optional AI CLI payload'
+$AiCliPayload = Join-Path $DevRoot 'cli-ai'
+Remove-Item $AiCliPayload -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $AiCliPayload | Out-Null
+$AiPackages = @($Config.aiCli | Where-Object { $_.supported -eq $true } | ForEach-Object { [string]$_.package })
+if ($AiPackages.Count -gt 0) {
+    & $NpmCmd install --global --prefix $AiCliPayload --no-audit --no-fund @AiPackages
+    if ($LASTEXITCODE -ne 0) { throw 'AI developer CLI staging failed.' }
+}
 
 Write-Step 'Preparing OpenCode Desktop Windows payload'
 $OpenCode = $Config.desktopApps | Where-Object { $_.name -eq 'OpenCode Desktop' } | Select-Object -First 1
