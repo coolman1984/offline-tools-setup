@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "ui": {
+    "productName": "Offline Automation & Development Suite",
+    "subtitle": "Professional Windows 10/11 workstation setup",
+    "defaultLanguage": "en",
+    "supportedLanguages": ["en", "ar"],
+    "minimumConsoleWidth": 92,
+    "minimumConsoleHeight": 28
+  },
+  "core": {
+    "id": "core",
+    "displayName": "Core Foundation",
+    "locked": true,
+    "description": "Always installed. Provides the common runtime, editor, Git, database connectivity, and offline package foundation used by every profile.",
+    "estimatedMb": 4200,
+    "pythonRequirementProfiles": ["core"],
+    "components": [
+      { "id": "vc-runtime", "name": "Microsoft Visual C++ Runtime", "required": true },
+      { "id": "powershell7", "name": "PowerShell 7", "required": true },
+      { "id": "mingit", "name": "MinGit", "required": true },
+      { "id": "vscode", "name": "Visual Studio Code Portable", "required": true },
+      { "id": "python-runtimes", "name": "Python 3.11 / 3.12 / 3.13 / 3.14", "required": true },
+      { "id": "node-lts", "name": "Node.js LTS", "required": true },
+      { "id": "offline-package-cache", "name": "Offline Python and Node package stores", "required": true },
+      { "id": "sql-odbc", "name": "Microsoft SQL Server ODBC Driver", "required": true },
+      { "id": "gitea", "name": "Local Gitea Development Hub", "required": true }
+    ]
+  },
+  "profiles": [
+    {
+      "id": "office",
+      "displayName": "Office Automation Pro",
+      "description": "Excel, Word, PowerPoint and Microsoft Office automation/control.",
+      "recommended": true,
+      "estimatedMb": 950,
+      "pythonRequirementProfiles": ["office"],
+      "components": [
+        { "id": "excel-files", "name": "Excel file engineering", "description": "Read, write, style, validate and generate Excel workbooks.", "selectedByDefault": true },
+        { "id": "office-com", "name": "Office COM automation", "description": "Control installed Excel, Word and PowerPoint applications through Windows automation.", "selectedByDefault": true },
+        { "id": "word-docx", "name": "Word document automation", "selectedByDefault": true },
+        { "id": "powerpoint-pptx", "name": "PowerPoint automation", "selectedByDefault": true },
+        { "id": "office-encryption", "name": "Office encryption helpers", "selectedByDefault": true },
+        { "id": "legacy-excel", "name": "Legacy Excel formats", "selectedByDefault": false }
+      ]
+    },
+    {
+      "id": "pdf",
+      "displayName": "PDF Engineering Pro",
+      "description": "Professional PDF creation, extraction, rendering, merging, splitting and validation.",
+      "recommended": true,
+      "estimatedMb": 700,
+      "pythonRequirementProfiles": ["pdf"],
+      "components": [
+        { "id": "pdf-read-write", "name": "PDF read/write/manipulation", "selectedByDefault": true },
+        { "id": "pdf-render", "name": "PDF rendering and page images", "selectedByDefault": true },
+        { "id": "pdf-extract", "name": "Text and table extraction", "selectedByDefault": true },
+        { "id": "pdf-create", "name": "PDF creation and reporting", "selectedByDefault": true },
+        { "id": "pdf-repair", "name": "PDF repair and structural tools", "selectedByDefault": true }
+      ]
+    },
+    {
+      "id": "ocr",
+      "displayName": "OCR & Imaging",
+      "description": "Document image processing and optional OCR engines.",
+      "recommended": false,
+      "estimatedMb": 1800,
+      "pythonRequirementProfiles": ["ocr"],
+      "components": [
+        { "id": "image-processing", "name": "Image processing", "selectedByDefault": true },
+        { "id": "tesseract", "name": "Tesseract OCR", "selectedByDefault": false, "nativeOptional": true },
+        { "id": "advanced-ocr", "name": "Advanced OCR packages", "selectedByDefault": false, "heavy": true }
+      ]
+    },
+    {
+      "id": "data-db",
+      "displayName": "Data & Database Pro",
+      "description": "Analytics, local databases, SQL connectivity and data engineering.",
+      "recommended": true,
+      "estimatedMb": 1800,
+      "pythonRequirementProfiles": ["data-database"],
+      "components": [
+        { "id": "analytics", "name": "Data analysis and scientific stack", "selectedByDefault": true },
+        { "id": "duckdb", "name": "DuckDB", "selectedByDefault": true },
+        { "id": "sqlite", "name": "SQLite tooling", "selectedByDefault": true },
+        { "id": "sql-clients", "name": "SQL database clients", "selectedByDefault": true },
+        { "id": "sql-server-express", "name": "Microsoft SQL Server Express", "selectedByDefault": false, "nativeOptional": true }
+      ]
+    },
+    {
+      "id": "web",
+      "displayName": "Full-Stack Web Development",
+      "description": "Modern frontend, backend, API and TypeScript development suite.",
+      "recommended": true,
+      "estimatedMb": 2800,
+      "pythonRequirementProfiles": ["web-python"],
+      "components": [
+        { "id": "typescript", "name": "TypeScript toolchain", "selectedByDefault": true },
+        { "id": "react-vite", "name": "React + Vite", "selectedByDefault": true },
+        { "id": "nextjs", "name": "Next.js", "selectedByDefault": true },
+        { "id": "node-backend", "name": "Node backend tooling", "selectedByDefault": true },
+        { "id": "python-api", "name": "Python API/backend tooling", "selectedByDefault": true },
+        { "id": "quality-tools", "name": "Linting and formatting", "selectedByDefault": true }
+      ]
+    },
+    {
+      "id": "ai-dev",
+      "displayName": "AI Coding Tools",
+      "description": "Pre-bundled Windows-compatible coding agents and VS Code extensions. Network is used only for approved AI service access.",
+      "recommended": false,
+      "estimatedMb": 1600,
+      "pythonRequirementProfiles": [],
+      "components": [
+        { "id": "codex", "name": "Codex", "selectedByDefault": true },
+        { "id": "cline", "name": "Cline", "selectedByDefault": true },
+        { "id": "kilo", "name": "Kilo Code", "selectedByDefault": true },
+        { "id": "opencode", "name": "OpenCode", "selectedByDefault": true },
+        { "id": "opencode-desktop", "name": "OpenCode Desktop", "selectedByDefault": true },
+        { "id": "claude-code", "name": "Claude Code", "selectedByDefault": false, "supported": false, "reason": "Official Windows runtime currently requires Git Bash or WSL; both are forbidden on target PCs." }
+      ]
+    },
+    {
+      "id": "quality",
+      "displayName": "Testing & Quality",
+      "description": "Testing, type checking, linting and code-quality utilities.",
+      "recommended": true,
+      "estimatedMb": 350,
+      "pythonRequirementProfiles": ["quality"],
+      "components": [
+        { "id": "pytest", "name": "Python testing", "selectedByDefault": true },
+        { "id": "ruff", "name": "Python linting", "selectedByDefault": true },
+        { "id": "mypy", "name": "Python type checking", "selectedByDefault": true },
+        { "id": "formatters", "name": "Code formatters", "selectedByDefault": true }
+      ]
+    }
+  ],
+  "presets": [
+    { "id": "recommended", "displayName": "Recommended Professional Setup", "profiles": ["office", "pdf", "data-db", "web", "quality"] },
+    { "id": "automation", "displayName": "Automation & Office Workstation", "profiles": ["office", "pdf", "data-db", "quality"] },
+    { "id": "webdev", "displayName": "Full-Stack Development Workstation", "profiles": ["web", "data-db", "quality"] },
+    { "id": "complete", "displayName": "Complete Workstation", "profiles": ["office", "pdf", "ocr", "data-db", "web", "ai-dev", "quality"] }
+  ]
+}
