@@ -24,6 +24,18 @@ function Get-RemoteFile([string]$Url,[string]$Destination) {
 Remove-Item $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $DevRoot,$WorkRoot | Out-Null
 
+Write-Step 'Preparing portable PowerShell 7'
+$PsRelease = Invoke-RestMethod -Uri $Config.core.powershell.releaseApi -Headers @{ 'User-Agent'='offline-tools-setup' }
+$PsAsset = $PsRelease.assets | Where-Object { $_.name -match $Config.core.powershell.assetRegex } | Select-Object -First 1
+if (-not $PsAsset) { throw 'Could not resolve the current PowerShell 7 Windows x64 ZIP asset.' }
+$PsZip = Join-Path $WorkRoot $PsAsset.name
+Get-RemoteFile $PsAsset.browser_download_url $PsZip
+$PsPayload = Join-Path $DevRoot 'powershell'
+Remove-Item $PsPayload -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $PsPayload | Out-Null
+Expand-Archive -Path $PsZip -DestinationPath $PsPayload -Force
+if (-not (Test-Path (Join-Path $PsPayload 'pwsh.exe'))) { throw 'PowerShell 7 executable was not found.' }
+
 Write-Step 'Preparing portable VS Code'
 $VsCodeZip = Join-Path $WorkRoot 'vscode.zip'
 Get-RemoteFile $Config.core.vscode.archiveUrl $VsCodeZip
@@ -43,17 +55,17 @@ foreach ($Extension in $Config.vscodeExtensions) {
     if ($LASTEXITCODE -ne 0) { throw "VS Code extension bundle failed: $Extension" }
 }
 
-Write-Step 'Preparing portable Git for Windows'
+Write-Step 'Preparing MinGit for native Windows command shells'
 $GitRelease = Invoke-RestMethod -Uri $Config.core.git.releaseApi -Headers @{ 'User-Agent'='offline-tools-setup' }
-$GitAsset = $GitRelease.assets | Where-Object { $_.name -match '^PortableGit-.*-64-bit\.7z\.exe$' } | Select-Object -First 1
-if (-not $GitAsset) { throw 'Could not resolve the latest PortableGit x64 asset.' }
-$GitSfx = Join-Path $WorkRoot $GitAsset.name
-Get-RemoteFile $GitAsset.browser_download_url $GitSfx
+$GitAsset = $GitRelease.assets | Where-Object { $_.name -match $Config.core.git.assetRegex } | Select-Object -First 1
+if (-not $GitAsset) { throw 'Could not resolve the latest MinGit x64 ZIP asset.' }
+$GitZip = Join-Path $WorkRoot $GitAsset.name
+Get-RemoteFile $GitAsset.browser_download_url $GitZip
 $GitPayload = Join-Path $DevRoot 'git'
+Remove-Item $GitPayload -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $GitPayload | Out-Null
-$GitProc = Start-Process -FilePath $GitSfx -ArgumentList @('-y',("-o`"{0}`"" -f $GitPayload)) -Wait -PassThru
-if ($GitProc.ExitCode -ne 0) { throw "PortableGit extraction failed: $($GitProc.ExitCode)" }
-if (-not (Test-Path (Join-Path $GitPayload 'cmd\git.exe'))) { throw 'Portable Git executable was not found.' }
+Expand-Archive -Path $GitZip -DestinationPath $GitPayload -Force
+if (-not (Test-Path (Join-Path $GitPayload 'cmd\git.exe'))) { throw 'MinGit executable was not found.' }
 
 Write-Step 'Preparing Gitea local GitHub-like server'
 $GiteaPayload = Join-Path $DevRoot 'gitea'
@@ -72,7 +84,7 @@ $env:PATH = $NodeFolder.FullName + ';' + $env:PATH
 $CliPayload = Join-Path $DevRoot 'cli'
 New-Item -ItemType Directory -Force -Path $CliPayload | Out-Null
 $Packages = @()
-foreach ($Item in $Config.aiCli) { $Packages += [string]$Item.package }
+foreach ($Item in $Config.aiCli) { if ($Item.supported -eq $true) { $Packages += [string]$Item.package } }
 foreach ($Item in $Config.nodeCli) { $Packages += [string]$Item }
 & $NpmCmd install --global --prefix $CliPayload --no-audit --no-fund @Packages
 if ($LASTEXITCODE -ne 0) { throw 'Developer CLI staging failed.' }
@@ -86,11 +98,11 @@ if ($OpenCode) {
         $DesktopDir = Join-Path $DevRoot 'desktop\opencode'
         Get-RemoteFile $Asset.browser_download_url (Join-Path $DesktopDir $Asset.name)
     } else {
-        Write-Warning 'OpenCode Desktop Windows asset was not found in the current release. CLI and VS Code extension are still bundled.'
+        Write-Warning 'OpenCode Desktop Windows asset was not found in the current release.'
     }
 }
 
-Write-Step 'Copying optional enterprise desktop payloads if supplied'
+Write-Step 'Copying optional approved desktop payloads if supplied'
 foreach ($Name in @('chatgpt','claude')) {
     $Source = Join-Path $RepoRoot ("vendor\desktop\{0}" -f $Name)
     if (Test-Path $Source) {
@@ -98,8 +110,6 @@ foreach ($Name in @('chatgpt','claude')) {
         New-Item -ItemType Directory -Force -Path $Destination | Out-Null
         Copy-Item (Join-Path $Source '*') $Destination -Recurse -Force
         Write-Host "Included pre-acquired $Name desktop payload."
-    } else {
-        Write-Warning "Optional $Name desktop payload not supplied. Put its approved offline installer under vendor\desktop\$Name before building."
     }
 }
 
@@ -107,3 +117,4 @@ $ConfigDestination = Join-Path $BundleRoot 'config\developer-stack.json'
 New-Item -ItemType Directory -Force -Path (Split-Path $ConfigDestination -Parent) | Out-Null
 Copy-Item (Join-Path $RepoRoot 'config\developer-stack.json') $ConfigDestination -Force
 Write-Host "Developer stack payload ready: $DevRoot" -ForegroundColor Green
+Write-Warning 'Claude Code is intentionally excluded from the guaranteed Windows profile because Bash and WSL are forbidden on target PCs.'
