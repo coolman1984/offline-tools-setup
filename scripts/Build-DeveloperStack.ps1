@@ -19,6 +19,7 @@ function Get-RemoteFile([string]$Url,[string]$Destination) {
     New-Item -ItemType Directory -Force -Path (Split-Path $Destination -Parent) | Out-Null
     Write-Host "Downloading $Url"
     Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing
+    if (-not (Test-Path $Destination)) { throw "Download failed: $Url" }
 }
 
 Remove-Item $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -73,6 +74,21 @@ Remove-Item $GitPayload -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $GitPayload | Out-Null
 Expand-Archive -Path $GitZip -DestinationPath $GitPayload -Force
 if (-not (Test-Path (Join-Path $GitPayload 'cmd\git.exe'))) { throw 'MinGit executable was not found.' }
+
+Write-Step 'Preparing isolated Portable Git Bash compatibility fallback'
+$PortableAsset = $GitRelease.assets | Where-Object { $_.name -match $Config.core.git.portableBashAssetRegex } | Select-Object -First 1
+if (-not $PortableAsset) { throw 'Could not resolve the current Portable Git for Windows x64 asset.' }
+$PortableArchive = Join-Path $WorkRoot $PortableAsset.name
+Get-RemoteFile $PortableAsset.browser_download_url $PortableArchive
+$BashPayload = Join-Path $DevRoot 'git-bash'
+Remove-Item $BashPayload -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $BashPayload | Out-Null
+$proc = Start-Process -FilePath $PortableArchive -ArgumentList @('-y',("-o{0}" -f $BashPayload)) -Wait -PassThru
+if ($proc.ExitCode -ne 0) { throw "Portable Git extraction failed with exit code $($proc.ExitCode)" }
+$PostInstall = Join-Path $BashPayload 'post-install.bat'
+if (Test-Path $PostInstall) { & $PostInstall | Out-Null }
+$BashExe = Join-Path $BashPayload 'bin\bash.exe'
+if (-not (Test-Path $BashExe)) { throw 'Portable Git Bash executable was not found after extraction.' }
 
 Write-Step 'Preparing Gitea local development hub'
 $GiteaPayload = Join-Path $DevRoot 'gitea'
@@ -135,4 +151,5 @@ $ConfigDestination = Join-Path $BundleRoot 'config\developer-stack.json'
 New-Item -ItemType Directory -Force -Path (Split-Path $ConfigDestination -Parent) | Out-Null
 Copy-Item (Join-Path $RepoRoot 'config\developer-stack.json') $ConfigDestination -Force
 Write-Host "Developer stack payload ready: $DevRoot" -ForegroundColor Green
-Write-Warning 'Claude Code is intentionally excluded from the guaranteed Windows profile because Bash and WSL are forbidden on target PCs.'
+Write-Host 'Portable Git Bash fallback is bundled but isolated and never selected as the default shell.' -ForegroundColor Green
+Write-Host 'Claude Code payload is bundled; target execution remains conditional on corporate policy allowing the isolated bash.exe.' -ForegroundColor Yellow
