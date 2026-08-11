@@ -1,5 +1,7 @@
 param(
-    [string]$BundleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    [string]$BundleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
+    [switch]$InstallTesseract,
+    [switch]$InstallSqlServerExpress
 )
 
 Set-StrictMode -Version Latest
@@ -39,9 +41,13 @@ $OdbcArgs = @('/i',"`"$OdbcMsi`"",'IACCEPTMSODBCSQLLICENSETERMS=YES','ADDLOCAL=A
 $Proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $OdbcArgs -Wait -PassThru
 if ($Proc.ExitCode -notin 0,3010) { throw "SQL ODBC driver failed with exit code $($Proc.ExitCode)" }
 
-$TesseractInstaller = Join-Path $BundleRoot $Manifest.ocr.tesseract.offlineInstallerRelativePath
-if (Test-Path $TesseractInstaller) {
-    Write-Step 'Installing Tesseract OCR from local bundle'
+if ($InstallTesseract) {
+    $TesseractInstaller = Join-Path $BundleRoot $Manifest.ocr.tesseract.offlineInstallerRelativePath
+    if (-not (Test-Path $TesseractInstaller)) {
+        throw "Tesseract was selected but approved offline media is missing: $TesseractInstaller"
+    }
+
+    Write-Step 'Installing selected Tesseract OCR component from local bundle'
     $Proc = Start-Process -FilePath $TesseractInstaller -ArgumentList '/S' -Wait -PassThru
     if ($Proc.ExitCode -notin 0,3010) { throw "Tesseract installer failed with exit code $($Proc.ExitCode)" }
 
@@ -57,37 +63,41 @@ if (Test-Path $TesseractInstaller) {
         }
     }
 } else {
-    Write-Host 'Tesseract media not included; built-in RapidOCR package remains available.' -ForegroundColor Yellow
+    Write-Host 'Tesseract not selected; skipping native OCR engine.' -ForegroundColor DarkGray
 }
 
-$SqlMedia = Join-Path $BundleRoot $Manifest.microsoft.sqlServerExpress.offlineMediaRelativePath
-$SqlSetup = Join-Path $SqlMedia $Manifest.microsoft.sqlServerExpress.requiredSetupFile
-$SqlService = Get-Service -Name 'MSSQL$SQLEXPRESS' -ErrorAction SilentlyContinue
+if ($InstallSqlServerExpress) {
+    $SqlMedia = Join-Path $BundleRoot $Manifest.microsoft.sqlServerExpress.offlineMediaRelativePath
+    $SqlSetup = Join-Path $SqlMedia $Manifest.microsoft.sqlServerExpress.requiredSetupFile
+    $SqlService = Get-Service -Name 'MSSQL$SQLEXPRESS' -ErrorAction SilentlyContinue
 
-if ($SqlService) {
-    Write-Host 'SQL Server Express instance already exists; skipping installation.' -ForegroundColor Yellow
-} elseif (Test-Path $SqlSetup) {
-    Write-Step 'Installing SQL Server Express from complete local media'
-    $CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $SqlArgs = @(
-        '/Q',
-        '/ACTION=Install',
-        '/FEATURES=SQLEngine',
-        '/INSTANCENAME=SQLEXPRESS',
-        "/SQLSYSADMINACCOUNTS=`"$CurrentIdentity`"",
-        '/SQLSVCSTARTUPTYPE=Automatic',
-        '/TCPENABLED=1',
-        '/NPENABLED=0',
-        '/UpdateEnabled=False',
-        '/IACCEPTSQLSERVERLICENSETERMS',
-        '/SUPPRESSPRIVACYSTATEMENTNOTICE'
-    )
-    $Proc = Start-Process -FilePath $SqlSetup -ArgumentList $SqlArgs -Wait -PassThru
-    if ($Proc.ExitCode -notin 0,3010) {
-        throw "SQL Server Express setup failed with exit code $($Proc.ExitCode). Check SQL Server Setup Bootstrap logs."
+    if ($SqlService) {
+        Write-Host 'SQL Server Express instance already exists; skipping installation.' -ForegroundColor Yellow
+    } elseif (Test-Path $SqlSetup) {
+        Write-Step 'Installing selected SQL Server Express from complete local media'
+        $CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $SqlArgs = @(
+            '/Q',
+            '/ACTION=Install',
+            '/FEATURES=SQLEngine',
+            '/INSTANCENAME=SQLEXPRESS',
+            "/SQLSYSADMINACCOUNTS=`"$CurrentIdentity`"",
+            '/SQLSVCSTARTUPTYPE=Automatic',
+            '/TCPENABLED=1',
+            '/NPENABLED=0',
+            '/UpdateEnabled=False',
+            '/IACCEPTSQLSERVERLICENSETERMS',
+            '/SUPPRESSPRIVACYSTATEMENTNOTICE'
+        )
+        $Proc = Start-Process -FilePath $SqlSetup -ArgumentList $SqlArgs -Wait -PassThru
+        if ($Proc.ExitCode -notin 0,3010) {
+            throw "SQL Server Express setup failed with exit code $($Proc.ExitCode). Check SQL Server Setup Bootstrap logs."
+        }
+    } else {
+        throw "SQL Server Express was selected but complete offline media is missing: $SqlSetup"
     }
 } else {
-    Write-Host 'SQL Server Express media not included; DuckDB, SQLite and SQL client libraries remain available.' -ForegroundColor Yellow
+    Write-Host 'SQL Server Express not selected; DuckDB, SQLite and SQL client support remain available.' -ForegroundColor DarkGray
 }
 
-Write-Host '`nNative offline components installed successfully.' -ForegroundColor Green
+Write-Host '`nSelected native components installed successfully.' -ForegroundColor Green
