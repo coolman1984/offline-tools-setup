@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "productName": "Windows Safe Care Center",
   "guardrails": {
     "neverDeleteUserFolders": true,
@@ -39,7 +39,7 @@
     {"id":"windows-installer-health","name":"Windows Installer health","category":"Core Services","mode":"diagnostic","duration":"instant","risk":"none","defaultSelected":true,"description":"Checks Windows Installer service state, executable version and in-progress transaction markers without starting or repairing the service."},
     {"id":"time-service-health","name":"Windows time health","category":"Core Services","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Checks time service and synchronization state because clock problems can break TLS, sign-in and certificate validation."},
     {"id":"vss-health","name":"Volume Shadow Copy health","category":"Recovery","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":false,"description":"Lists VSS writers and existing shadow copies. It never deletes or resizes shadow storage."},
-    {"id":"runtime-readiness","name":"Windows runtime readiness","category":"Core Services","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Inventories legacy .NET Framework readiness and related Windows runtime prerequisites without installing optional features."},
+    {"id":"runtime-readiness","name":"Windows runtime & recovery readiness","category":"Recovery & Core Services","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Inventories legacy .NET readiness plus WinRE, BitLocker, TPM and Secure Boot servicing state without changing recovery, encryption, firmware or optional Windows features."},
     {"id":"development-environment-health","name":"Development environment readiness","category":"Diagnostics","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Reports PATH duplication, PowerShell policy/language mode, application-control state, proxy settings and conflicting Python commands without changing them."},
     {"id":"component-store-analysis","name":"Windows component store analysis","category":"Diagnostics","mode":"diagnostic","duration":"medium","risk":"none","defaultSelected":false,"description":"Runs DISM AnalyzeComponentStore. Does not delete WinSxS files."},
     {"id":"dism-checkhealth","name":"DISM quick component-store health","category":"Windows Integrity","mode":"diagnostic","duration":"short","risk":"none","defaultSelected":true,"description":"Checks whether Windows has already marked the component store as corrupted."},
