@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "targetInternetMode": "ai-services-only",
+    "targetDownloadsAllowed": false,
+    "targetExtensionMarketplaceAllowed": false,
+    "targetPackageRegistryAllowed": false,
+    "targetSelfUpdatesAllowed": false,
+    "localModelsAllowed": false,
+    "allInstallArtifactsMustBePrebundled": true
+  },
+  "core": {
+    "vscode": {
+      "channel": "stable",
+      "architecture": "x64",
+      "archiveUrl": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
+      "portable": true
+    },
+    "git": {
+      "distribution": "Git for Windows",
+      "architecture": "x64",
+      "portablePreferred": true,
+      "releaseApi": "https://api.github.com/repos/git-for-windows/git/releases/latest"
+    },
+    "gitea": {
+      "version": "1.27.0",
+      "file": "gitea-1.27.0-windows-4.0-amd64.exe",
+      "url": "https://dl.gitea.com/gitea/1.27.0/gitea-1.27.0-windows-4.0-amd64.exe",
+      "database": "sqlite3",
+      "listen": "127.0.0.1",
+      "port": 3000,
+      "offlineMode": true
+    }
+  },
+  "aiCli": [
+    { "name": "Codex CLI", "package": "@openai/codex", "command": "codex" },
+    { "name": "Claude Code", "package": "@anthropic-ai/claude-code", "command": "claude" },
+    { "name": "Cline CLI", "package": "cline", "command": "cline" },
+    { "name": "Kilo CLI", "package": "@kilocode/cli", "command": "kilo" },
+    { "name": "OpenCode CLI", "package": "opencode-ai", "command": "opencode" }
+  ],
+  "nodeCli": [
+    "pnpm",
+    "yarn",
+    "typescript",
+    "tsx",
+    "eslint",
+    "prettier",
+    "@vscode/vsce"
+  ],
+  "vscodeExtensions": [
+    "OpenAI.chatgpt",
+    "anthropic.claude-code",
+    "saoudrizwan.claude-dev",
+    "kilocode.Kilo-Code",
+    "sst-dev.opencode",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "ms-toolsai.jupyter",
+    "ms-vscode.powershell",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "eamodio.gitlens"
+  ],
+  "desktopApps": [
+    {
+      "name": "OpenCode Desktop",
+      "supported": true,
+      "source": "github-release",
+      "releaseApi": "https://api.github.com/repos/anomalyco/opencode/releases/latest",
+      "assetPattern": "opencode-desktop-windows-x64.exe"
+    },
+    {
+      "name": "ChatGPT Desktop with Codex",
+      "supported": true,
+      "source": "enterprise-offline-payload",
+      "payloadPath": "payload/developer/desktop/chatgpt",
+      "note": "Pre-acquire the enterprise/offline Windows package. Target devices must not use Microsoft Store or winget downloads."
+    },
+    {
+      "name": "Claude Desktop",
+      "supported": true,
+      "source": "offline-payload",
+      "payloadPath": "payload/developer/desktop/claude",
+      "note": "Pre-acquire the Windows installer on the connected build machine and place it in this payload directory."
+    },
+    {
+      "name": "Kilo Desktop",
+      "supported": false,
+      "replacement": "Kilo Console local browser UI"
+    },
+    {
+      "name": "Cline Desktop",
+      "supported": false,
+      "replacement": "Cline VS Code extension, CLI, and local Kanban UI"
+    }
+  ]
+}
