@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "productName": "Windows Safe Care Center",
   "guardrails": {
     "neverDeleteUserFolders": true,
@@ -22,8 +22,14 @@
     {
       "id": "deep-diagnostics",
       "name": "Deep Diagnostics",
-      "description": "Thorough read-only diagnostics. Some checks can take a long time.",
+      "description": "Thorough read-only diagnostics focused on Windows integrity and hardware health. Some checks can take a long time.",
       "actions": ["disk-space-analysis", "pending-reboot", "component-store-analysis", "dism-scanhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health", "power-health"]
+    },
+    {
+      "id": "all-diagnostics",
+      "name": "All Diagnostics",
+      "description": "Runs every read-only Windows Care diagnostic. Long-running checks are included; no repair action is executed.",
+      "actions": ["disk-space-analysis", "pending-reboot", "component-store-analysis", "dism-checkhealth", "dism-scanhealth", "sfc-verify", "chkdsk-scan", "storage-health", "device-problems", "recent-critical-events", "windows-update-health", "power-health"]
     }
   ],
   "actions": [
