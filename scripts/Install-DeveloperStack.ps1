@@ -14,44 +14,49 @@ if ($Config.policy.localModelsAllowed -ne $false) { throw 'Policy violation: loc
 if ($Config.policy.bashAllowed -ne $false) { throw 'Policy violation: Bash must remain disabled on target PCs.' }
 
 function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
-function Add-MachinePath([string]$PathToAdd) {
-    if (-not (Test-Path $PathToAdd)) { return }
-    $Current = [Environment]::GetEnvironmentVariable('Path','Machine')
-    if (-not $Current) { $Current = '' }
-    if (($Current -split ';') -notcontains $PathToAdd) {
-        [Environment]::SetEnvironmentVariable('Path', ($Current.TrimEnd(';') + ';' + $PathToAdd).TrimStart(';'), 'Machine')
+function Test-PortAvailable([int]$Port) {
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,$Port)
+        $listener.Start()
+        return $true
+    } catch { return $false }
+    finally { if ($listener) { try { $listener.Stop() } catch {} } }
+}
+function Get-FreeHubPort {
+    $start = [int]$Config.core.gitea.preferredPort
+    $end = [int]$Config.core.gitea.portSearchEnd
+    for ($port=$start; $port -le $end; $port++) {
+        if (Test-PortAvailable $port) { return $port }
     }
+    throw "No free loopback port was found for the local development hub in range $start-$end."
 }
 
 $DevRoot = Join-Path $InstallRoot 'Developer'
-New-Item -ItemType Directory -Force -Path $DevRoot | Out-Null
+$BinRoot = Join-Path $InstallRoot 'bin'
+New-Item -ItemType Directory -Force -Path $DevRoot,$BinRoot | Out-Null
 
-Write-Step 'Installing portable PowerShell 7'
+Write-Step 'Installing portable PowerShell 7 in an isolated managed location'
 $PsRoot = Join-Path $DevRoot 'PowerShell7'
 Remove-Item $PsRoot -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $Payload 'powershell') $PsRoot -Recurse -Force
 $Pwsh = Join-Path $PsRoot 'pwsh.exe'
 if (-not (Test-Path $Pwsh)) { throw 'PowerShell 7 executable was not found.' }
-Add-MachinePath $PsRoot
 [Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT','1','Machine')
 
 Write-Step 'Installing portable VS Code with selected pre-bundled extensions'
-$VsCodeSource = Join-Path $Payload 'vscode'
 $VsCodeRoot = Join-Path $DevRoot 'VSCode'
 Remove-Item $VsCodeRoot -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item $VsCodeSource $VsCodeRoot -Recurse -Force
-$PortableData = Join-Path $VsCodeRoot 'data'
-$ExtensionRoot = Join-Path $PortableData 'extensions'
-$SettingsDir = Join-Path $PortableData 'user-data\User'
+Copy-Item (Join-Path $Payload 'vscode') $VsCodeRoot -Recurse -Force
+$ExtensionRoot = Join-Path $VsCodeRoot 'data\extensions'
+$SettingsDir = Join-Path $VsCodeRoot 'data\user-data\User'
 New-Item -ItemType Directory -Force -Path $ExtensionRoot,$SettingsDir | Out-Null
-
 $CoreExtensionSource = Join-Path $Payload 'vscode-extensions-core'
 if (Test-Path $CoreExtensionSource) { Copy-Item (Join-Path $CoreExtensionSource '*') $ExtensionRoot -Recurse -Force }
 if ($InstallAiTools) {
     $AiExtensionSource = Join-Path $Payload 'vscode-extensions-ai'
     if (Test-Path $AiExtensionSource) { Copy-Item (Join-Path $AiExtensionSource '*') $ExtensionRoot -Recurse -Force }
 }
-
 $VsSettings = @{
     'update.mode' = 'none'
     'extensions.autoUpdate' = $false
@@ -64,29 +69,24 @@ $VsSettings = @{
 $VsSettings | Set-Content (Join-Path $SettingsDir 'settings.json') -Encoding UTF8
 $CodeCmd = Join-Path $VsCodeRoot 'bin\code.cmd'
 if (-not (Test-Path $CodeCmd)) { throw 'VS Code command not found after copy.' }
-Add-MachinePath (Join-Path $VsCodeRoot 'bin')
 
-Write-Step 'Installing MinGit for PowerShell and Command Prompt'
+Write-Step 'Installing MinGit without changing the global PATH'
 $GitRoot = Join-Path $DevRoot 'Git'
 Remove-Item $GitRoot -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $Payload 'git') $GitRoot -Recurse -Force
-$GitCmdDir = Join-Path $GitRoot 'cmd'
-$GitExe = Join-Path $GitCmdDir 'git.exe'
+$GitExe = Join-Path $GitRoot 'cmd\git.exe'
 if (-not (Test-Path $GitExe)) { throw 'Git executable not found.' }
-Add-MachinePath $GitCmdDir
 
-Write-Step 'Installing core developer CLIs'
+Write-Step 'Installing pre-staged core developer CLIs'
 $CoreCliRoot = Join-Path $DevRoot 'CLI-Core'
 Remove-Item $CoreCliRoot -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $Payload 'cli-core') $CoreCliRoot -Recurse -Force
-Add-MachinePath $CoreCliRoot
 
 $AiCliRoot = Join-Path $DevRoot 'CLI-AI'
 if ($InstallAiTools) {
-    Write-Step 'Installing selected AI coding CLIs'
+    Write-Step 'Installing selected AI coding CLIs from local payload'
     Remove-Item $AiCliRoot -Recurse -Force -ErrorAction SilentlyContinue
     Copy-Item (Join-Path $Payload 'cli-ai') $AiCliRoot -Recurse -Force
-    Add-MachinePath $AiCliRoot
 }
 
 [Environment]::SetEnvironmentVariable('DISABLE_AUTOUPDATER','1','Machine')
@@ -95,7 +95,14 @@ if ($InstallAiTools) {
 [Environment]::SetEnvironmentVariable('npm_config_audit','false','Machine')
 [Environment]::SetEnvironmentVariable('npm_config_fund','false','Machine')
 
-Write-Step 'Installing local Gitea development hub'
+Write-Step 'Installing local Gitea development hub on a conflict-safe loopback port'
+$ServiceName = 'OfflineDevelopmentHub'
+$ExistingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($ExistingService -and $ExistingService.Status -ne 'Stopped') {
+    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+$GiteaPort = Get-FreeHubPort
 $GiteaRoot = Join-Path $DevRoot 'Gitea'
 $GiteaData = Join-Path $GiteaRoot 'data'
 $GiteaRepos = Join-Path $GiteaData 'repositories'
@@ -120,8 +127,8 @@ ROOT = $NormalizedRoot/data/repositories
 [server]
 DOMAIN = 127.0.0.1
 HTTP_ADDR = 127.0.0.1
-HTTP_PORT = 3000
-ROOT_URL = http://127.0.0.1:3000/
+HTTP_PORT = $GiteaPort
+ROOT_URL = http://127.0.0.1:$GiteaPort/
 OFFLINE_MODE = true
 DISABLE_SSH = true
 
@@ -133,6 +140,7 @@ REQUIRE_SIGNIN_VIEW = true
 INSTALL_LOCK = true
 "@
 $AppIni | Set-Content $GiteaConfig -Encoding UTF8
+$GiteaPort | Set-Content (Join-Path $GiteaRoot 'PORT.txt') -Encoding ASCII
 & $GiteaExe --work-path $GiteaRoot --config $GiteaConfig migrate
 if ($LASTEXITCODE -ne 0) { throw 'Gitea database migration failed.' }
 
@@ -143,7 +151,7 @@ if (-not (Test-Path $AdminMarker)) {
     if ($LASTEXITCODE -eq 0) {
         @"
 Offline Development Hub
-URL: http://127.0.0.1:3000/
+URL: http://127.0.0.1:$GiteaPort/
 Username: offline-admin
 Temporary password: $Password
 Change this password on first login.
@@ -151,48 +159,45 @@ Change this password on first login.
     }
 }
 
-$ServiceName = 'OfflineDevelopmentHub'
-$ExistingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $ExistingService) {
     $BinaryPath = ('"{0}" --work-path "{1}" --config "{2}" web' -f $GiteaExe,$GiteaRoot,$GiteaConfig)
     New-Service -Name $ServiceName -BinaryPathName $BinaryPath -DisplayName 'Offline Development Hub' -StartupType Automatic | Out-Null
 }
 Start-Service -Name $ServiceName -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 700
+$ServiceState = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if (-not $ServiceState -or $ServiceState.Status -ne 'Running') {
+    throw "Local development hub service could not start on port $GiteaPort. Check Windows service and application-control policy logs."
+}
 
 if ($InstallAiTools) {
     Write-Step 'Staging approved AI desktop application payloads'
     $DesktopTarget = Join-Path $DevRoot 'DesktopInstallers'
     New-Item -ItemType Directory -Force -Path $DesktopTarget | Out-Null
-    $DesktopSource = Join-Path $Payload 'desktop'
-    if (Test-Path $DesktopSource) { Copy-Item (Join-Path $DesktopSource '*') $DesktopTarget -Recurse -Force }
+    if (Test-Path (Join-Path $Payload 'desktop')) { Copy-Item (Join-Path $Payload 'desktop\*') $DesktopTarget -Recurse -Force }
 }
 
-Write-Step 'Creating local launchers'
-$Launchers = Join-Path $InstallRoot 'bin'
-New-Item -ItemType Directory -Force -Path $Launchers | Out-Null
-"@echo off`r`n`"$CodeCmd`" %*" | Set-Content (Join-Path $Launchers 'code-offline.cmd') -Encoding ASCII
-"@echo off`r`n`"$Pwsh`" %*" | Set-Content (Join-Path $Launchers 'pwsh-offline.cmd') -Encoding ASCII
-"@echo off`r`nstart `"`" http://127.0.0.1:3000/" | Set-Content (Join-Path $Launchers 'dev-hub.cmd') -Encoding ASCII
-Add-MachinePath $Launchers
+Write-Step 'Creating local command wrappers without adding tool directories to PATH'
+"@echo off`r`n`"$CodeCmd`" %*`r`n" | Set-Content (Join-Path $BinRoot 'code-offline.cmd') -Encoding ASCII
+"@echo off`r`n`"$Pwsh`" %*`r`n" | Set-Content (Join-Path $BinRoot 'pwsh-offline.cmd') -Encoding ASCII
+"@echo off`r`n`"$GitExe`" %*`r`n" | Set-Content (Join-Path $BinRoot 'git-offline.cmd') -Encoding ASCII
+"@echo off`r`nstart `"`" http://127.0.0.1:$GiteaPort/`r`n" | Set-Content (Join-Path $BinRoot 'dev-hub.cmd') -Encoding ASCII
 
 Write-Step 'Developer stack smoke tests'
 & $Pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 smoke test failed.' }
 & $GitExe --version
 if ($LASTEXITCODE -ne 0) { throw 'Git smoke test failed.' }
-foreach ($Command in @('pnpm.cmd','yarn.cmd','tsc.cmd')) {
-    $Path = Join-Path $CoreCliRoot $Command
-    if (-not (Test-Path $Path)) { throw "Missing core developer CLI launcher: $Command" }
+foreach ($Command in @('pnpm.cmd','yarn.cmd','tsc.cmd','node-gyp.cmd')) {
+    if (-not (Test-Path (Join-Path $CoreCliRoot $Command))) { throw "Missing core developer CLI launcher: $Command" }
 }
 if ($InstallAiTools) {
     foreach ($Command in @('codex.cmd','cline.cmd','kilo.cmd','opencode.cmd')) {
-        $Path = Join-Path $AiCliRoot $Command
-        if (-not (Test-Path $Path)) { throw "Missing AI CLI launcher: $Command" }
+        if (-not (Test-Path (Join-Path $AiCliRoot $Command))) { throw "Missing AI CLI launcher: $Command" }
     }
 }
 
 Write-Host '`nWINDOWS-NATIVE DEVELOPER STACK INSTALLED.' -ForegroundColor Green
-Write-Host 'Shells: PowerShell 7 / Windows PowerShell / Command Prompt. Bash and WSL are not required.' -ForegroundColor Green
-if ($InstallAiTools) { Write-Host 'Selected AI coding tools were installed from the local payload.' -ForegroundColor Green }
-Write-Host 'Claude Code is not included in the guaranteed profile because its official Windows runtime currently requires Git Bash or WSL.' -ForegroundColor Yellow
-Write-Host 'No local generative AI models were installed. No package or extension downloads are required on the target PC.' -ForegroundColor Green
+Write-Host "Local development hub: http://127.0.0.1:$GiteaPort/" -ForegroundColor Green
+Write-Host 'No developer tool directory was added directly to the global PATH.' -ForegroundColor Green
+Write-Host 'Claude Code remains outside the guaranteed profile because Git Bash and WSL are forbidden.' -ForegroundColor Yellow
