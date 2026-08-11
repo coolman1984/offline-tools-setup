@@ -1,0 +1,11 @@
+openpyxl
+XlsxWriter
+xlrd
+pyxlsb
+odfpy
+pywin32
+comtypes
+python-docx
+python-pptx
+olefile
+msoffcrypto-tool
