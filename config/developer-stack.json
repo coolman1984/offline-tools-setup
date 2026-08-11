@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "policy": {
     "targetInternetMode": "ai-services-only",
     "targetDownloadsAllowed": false,
@@ -10,7 +10,9 @@
     "bashAllowed": false,
     "wslAllowed": false,
     "allowedShells": ["powershell7", "windows-powershell", "cmd"],
-    "allInstallArtifactsMustBePrebundled": true
+    "allInstallArtifactsMustBePrebundled": true,
+    "disableTlsVerificationAllowed": false,
+    "useWindowsCertificateStoreForNode": true
   },
   "core": {
     "vscode": {
@@ -69,7 +71,8 @@
     "tsx",
     "eslint",
     "prettier",
-    "@vscode/vsce"
+    "@vscode/vsce",
+    "node-gyp@13.0.1"
   ],
   "vscodeExtensionsCore": [
     "ms-python.python",
