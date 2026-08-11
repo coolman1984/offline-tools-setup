@@ -7,6 +7,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ManifestPath = Join-Path $RepoRoot 'config\tool-manifest.json'
@@ -20,6 +21,14 @@ function Write-Step([string]$Text) {
 
 function Get-Sha256([string]$Path) {
     return (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-RelativeBundlePath([string]$Root, [string]$FullPath) {
+    $NormalizedRoot = $Root.TrimEnd('\')
+    if (-not $FullPath.StartsWith($NormalizedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "File is outside bundle root: $FullPath"
+    }
+    return $FullPath.Substring($NormalizedRoot.Length).TrimStart('\').Replace('\','/')
 }
 
 function Get-RemoteFile {
@@ -126,10 +135,13 @@ Get-RemoteFile -Url $Manifest.node.msiUrl -Destination $NodeMsi
 Get-RemoteFile -Url $Manifest.node.zipUrl -Destination $NodeZip
 Get-RemoteFile -Url $Manifest.node.shasumsUrl -Destination $NodeShasums
 
-$ShasumLine = Get-Content $NodeShasums | Where-Object { $_ -match [regex]::Escape($Manifest.node.msiFile) } | Select-Object -First 1
-if (-not $ShasumLine) { throw 'Node.js MSI was not found in SHASUMS256.txt' }
-$ExpectedNodeHash = ($ShasumLine -split '\s+')[0].ToLowerInvariant()
-if ((Get-Sha256 $NodeMsi) -ne $ExpectedNodeHash) { throw 'Node.js MSI hash verification failed.' }
+foreach ($NodeFile in @($Manifest.node.msiFile, $Manifest.node.zipFile)) {
+    $Line = Get-Content $NodeShasums | Where-Object { $_ -match ("\s" + [regex]::Escape($NodeFile) + '$') } | Select-Object -First 1
+    if (-not $Line) { throw "Node.js file was not found in SHASUMS256.txt: $NodeFile" }
+    $ExpectedHash = ($Line -split '\s+')[0].ToLowerInvariant()
+    $LocalPath = Join-Path $NodeInstallerDir $NodeFile
+    if ((Get-Sha256 $LocalPath) -ne $ExpectedHash) { throw "Node.js hash verification failed: $NodeFile" }
+}
 
 Write-Step 'Creating temporary Python builder runtime'
 $Primary = $Manifest.python.versions | Where-Object { $_.version -eq $Manifest.python.primary } | Select-Object -First 1
@@ -156,7 +168,8 @@ if (-not (Test-Path $BuilderPython)) { throw 'Temporary builder Python was not c
 Write-Step 'Building per-version Python wheelhouses'
 $Recommended = Join-Path $RepoRoot 'requirements\recommended.txt'
 foreach ($Python in $Manifest.python.versions) {
-    $Tag = 'py' + (($Python.version.Split('.')[0..1]) -join '')
+    $VersionParts = $Python.version.Split('.')
+    $Tag = "py$($VersionParts[0])$($VersionParts[1])"
     $Destination = Join-Path $WheelRoot $Tag
     $IsPrimary = $Python.version -eq $Manifest.python.primary
     Invoke-PipDownloadForTarget -BuilderPython $BuilderPython -PythonVersion $Python.version -RequirementFile $Recommended -Destination $Destination -FailOnMissing:$IsPrimary
@@ -166,7 +179,8 @@ if ($IncludeHeavyOcr) {
     Write-Step 'Building optional heavy OCR wheelhouses'
     $Heavy = Join-Path $RepoRoot 'requirements\ocr-heavy.txt'
     foreach ($Python in $Manifest.python.versions) {
-        $Tag = 'py' + (($Python.version.Split('.')[0..1]) -join '')
+        $VersionParts = $Python.version.Split('.')
+        $Tag = "py$($VersionParts[0])$($VersionParts[1])"
         $Destination = Join-Path $WheelRoot ($Tag + '-ocr-heavy')
         Invoke-PipDownloadForTarget -BuilderPython $BuilderPython -PythonVersion $Python.version -RequirementFile $Heavy -Destination $Destination -FailOnMissing:$false
     }
@@ -200,16 +214,6 @@ Copy-Item (Join-Path $RepoRoot 'scripts\Install-OfflineTools.ps1') (Join-Path $O
 Copy-Item (Join-Path $RepoRoot 'scripts\Verify-OfflineBundle.ps1') (Join-Path $OutputDir 'scripts\Verify-OfflineBundle.ps1') -Force
 Copy-Item (Join-Path $RepoRoot 'START-HERE.cmd') (Join-Path $OutputDir 'START-HERE.cmd') -Force
 
-Write-Step 'Creating SHA-256 integrity manifest'
-$HashEntries = Get-ChildItem $OutputDir -File -Recurse | Where-Object { $_.Name -ne 'bundle-sha256.json' } | ForEach-Object {
-    [pscustomobject]@{
-        path = [System.IO.Path]::GetRelativePath($OutputDir, $_.FullName).Replace('\\','/')
-        sha256 = Get-Sha256 $_.FullName
-        size = $_.Length
-    }
-}
-$HashEntries | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDir 'bundle-sha256.json') -Encoding UTF8
-
 $BuildInfo = [pscustomobject]@{
     builtAtUtc = [DateTime]::UtcNow.ToString('o')
     architecture = $Manifest.target.architecture
@@ -219,6 +223,16 @@ $BuildInfo = [pscustomobject]@{
     offlineOnly = $true
 }
 $BuildInfo | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDir 'bundle-info.json') -Encoding UTF8
+
+Write-Step 'Creating SHA-256 integrity manifest'
+$HashEntries = Get-ChildItem $OutputDir -File -Recurse | Where-Object { $_.Name -ne 'bundle-sha256.json' } | ForEach-Object {
+    [pscustomobject]@{
+        path = Get-RelativeBundlePath $OutputDir $_.FullName
+        sha256 = Get-Sha256 $_.FullName
+        size = $_.Length
+    }
+}
+$HashEntries | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDir 'bundle-sha256.json') -Encoding UTF8
 
 if ($CreateZip) {
     Write-Step 'Creating transport ZIP'
