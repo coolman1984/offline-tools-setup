@@ -21,7 +21,9 @@ function Write-CmdLauncher {
 $Pwsh = Join-Path $InstallRoot 'Developer\PowerShell7\pwsh.exe'
 $Code = Join-Path $InstallRoot 'Developer\VSCode\bin\code.cmd'
 $Git = Join-Path $InstallRoot 'Developer\Git\cmd\git.exe'
-$GiteaUrl = 'http://127.0.0.1:3000/'
+$GiteaPortFile = Join-Path $InstallRoot 'Developer\Gitea\PORT.txt'
+$GiteaPort = if (Test-Path $GiteaPortFile) { (Get-Content $GiteaPortFile -Raw).Trim() } else { '13080' }
+$GiteaUrl = "http://127.0.0.1:$GiteaPort/"
 
 if (Test-Path $Pwsh) { Write-CmdLauncher 'pwsh-ots' "`"$Pwsh`" %*" }
 if (Test-Path $Code) { Write-CmdLauncher 'code-ots' "`"$Code`" %*" }
@@ -60,4 +62,5 @@ if ($IncludeAiTools) {
 }
 
 Write-Host "Managed launcher gateway ready: $BinRoot"
+Write-Host "Local development hub: $GiteaUrl"
 Write-Host 'Only this directory should be exposed through the machine PATH.'
