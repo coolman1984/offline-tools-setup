@@ -21,6 +21,7 @@ function Write-CmdLauncher {
 $Pwsh = Join-Path $InstallRoot 'Developer\PowerShell7\pwsh.exe'
 $Code = Join-Path $InstallRoot 'Developer\VSCode\bin\code.cmd'
 $Git = Join-Path $InstallRoot 'Developer\Git\cmd\git.exe'
+$Bash = Join-Path $InstallRoot 'Developer\GitBash\bin\bash.exe'
 $GiteaPortFile = Join-Path $InstallRoot 'Developer\Gitea\PORT.txt'
 $GiteaPort = if (Test-Path $GiteaPortFile) { (Get-Content $GiteaPortFile -Raw).Trim() } else { '13080' }
 $GiteaUrl = "http://127.0.0.1:$GiteaPort/"
@@ -28,6 +29,7 @@ $GiteaUrl = "http://127.0.0.1:$GiteaPort/"
 if (Test-Path $Pwsh) { Write-CmdLauncher 'pwsh-ots' "`"$Pwsh`" %*" }
 if (Test-Path $Code) { Write-CmdLauncher 'code-ots' "`"$Code`" %*" }
 if (Test-Path $Git) { Write-CmdLauncher 'git-ots' "`"$Git`" %*" }
+if (Test-Path $Bash) { Write-CmdLauncher 'bash-ots' "`"$Bash`" %*" }
 
 # Exact managed Python wrappers. They deliberately ignore PYTHONHOME/PYTHONPATH and user-site
 # packages so an older workstation configuration cannot contaminate the suite.
@@ -82,9 +84,14 @@ if ($IncludeAiTools) {
             Write-CmdLauncher $tool "$nodeEnvironment`r`n$scriptShellLine`r`n`"$cmd`" %*"
         }
     }
+    $claude = Join-Path $aiCli 'claude.cmd'
+    if ((Test-Path $claude) -and (Test-Path $Bash)) {
+        Write-CmdLauncher 'claude' "$nodeEnvironment`r`nset CLAUDE_CODE_GIT_BASH_PATH=$Bash`r`nset DISABLE_AUTOUPDATER=1`r`n`"$claude`" %*"
+    }
 }
 
 Write-Host "Managed launcher gateway ready: $BinRoot"
 Write-Host "Local development hub: $GiteaUrl"
 Write-Host 'Managed Python/Node commands are isolated from stale user environment variables.'
+Write-Host 'Portable Git Bash is exposed only as bash-ots and is never the default shell.'
 Write-Host 'Only this directory should be exposed through the machine PATH.'
