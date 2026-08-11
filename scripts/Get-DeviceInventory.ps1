@@ -18,11 +18,13 @@ function To-Gb($Bytes) {
 $os = Safe { Get-CimInstance Win32_OperatingSystem }
 $cs = Safe { Get-CimInstance Win32_ComputerSystem }
 $bios = Safe { Get-CimInstance Win32_BIOS }
+$cv = Safe { Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' }
 $cpu = @(Safe { Get-CimInstance Win32_Processor } @())
 $memory = @(Safe { Get-CimInstance Win32_PhysicalMemory } @())
 $gpu = @(Safe { Get-CimInstance Win32_VideoController } @())
 $volumes = @(Safe { Get-Volume | Where-Object DriveLetter } @())
 $disks = @(Safe { Get-Disk } @())
+$partitions = @(Safe { Get-Partition | Select-Object DiskNumber,PartitionNumber,DriveLetter,Type,IsSystem,IsBoot,IsActive,@{N='SizeGB';E={To-Gb $_.Size}} } @())
 $physical = @(Safe { Get-PhysicalDisk } @())
 $netAdapters = @(Safe { Get-NetAdapter -IncludeHidden | Select-Object Name,InterfaceDescription,Status,MacAddress,LinkSpeed,MediaType,ifIndex } @())
 $netConfig = @(Safe { Get-NetIPConfiguration -All } @())
@@ -35,6 +37,19 @@ $tpm = Safe { Get-Tpm | Select-Object TpmPresent,TpmReady,TpmEnabled,TpmActivate
 $secureBoot = Safe { Confirm-SecureBootUEFI } $null
 $executionPolicy = @(Safe { Get-ExecutionPolicy -List } @())
 $proxy = Safe { (netsh winhttp show proxy | Out-String).Trim() } ''
+$systemLocale = Safe { (Get-WinSystemLocale).Name } ([System.Globalization.CultureInfo]::CurrentUICulture.Name)
+
+$bitlocker = @(Safe {
+    Get-BitLockerVolume | Select-Object MountPoint,VolumeType,VolumeStatus,ProtectionStatus,LockStatus,EncryptionMethod,EncryptionPercentage,AutoUnlockEnabled,@{N='KeyProtectorTypes';E={@($_.KeyProtector | ForEach-Object KeyProtectorType)}}
+} @())
+$winReInfo = Safe { (& reagentc.exe /info 2>&1 | Out-String).Trim() } ''
+$secureBootServicing = Safe { Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\Servicing' }
+$secureBoot2023Status = if ($secureBootServicing) { [string]$secureBootServicing.UEFICA2023Status } else { '' }
+$secureBoot2023Error = if ($secureBootServicing) { [string]$secureBootServicing.UEFICA2023Error } else { '' }
+$secureBootEvents = @(Safe {
+    Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(1795,1800,1801,1803,1808); StartTime=(Get-Date).AddDays(-45)} -MaxEvents 30 |
+        Select-Object TimeCreated,ProviderName,Id,LevelDisplayName,Message
+} @())
 
 $diskReliability = foreach ($pd in $physical) {
     $rel = Safe { $pd | Get-StorageReliabilityCounter }
@@ -74,6 +89,8 @@ $recentEvents = @(Safe {
 
 $envPathMachine = [Environment]::GetEnvironmentVariable('Path','Machine')
 $envPathUser = [Environment]::GetEnvironmentVariable('Path','User')
+$ubr = if ($cv -and $null -ne $cv.UBR) { [int]$cv.UBR } else { 0 }
+$buildNumber = if ($cv -and $cv.CurrentBuildNumber) { [string]$cv.CurrentBuildNumber } else { [string]$os.BuildNumber }
 
 $inventory = [ordered]@{
     generatedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -89,8 +106,13 @@ $inventory = [ordered]@{
     windows = [ordered]@{
         caption = $os.Caption
         version = $os.Version
-        buildNumber = $os.BuildNumber
+        buildNumber = $buildNumber
+        ubr = $ubr
+        fullBuild = "$buildNumber.$ubr"
+        displayVersion = if ($cv) { [string]$cv.DisplayVersion } else { '' }
+        editionId = if ($cv) { [string]$cv.EditionID } else { '' }
         architecture = $os.OSArchitecture
+        systemLocale = $systemLocale
         installDate = $os.InstallDate
         lastBoot = $os.LastBootUpTime
         locale = $os.Locale
@@ -109,15 +131,25 @@ $inventory = [ordered]@{
     gpu = @($gpu | Select-Object Name,DriverVersion,VideoProcessor,AdapterRAM,CurrentHorizontalResolution,CurrentVerticalResolution)
     volumes = @($volumes | Select-Object DriveLetter,FileSystemLabel,FileSystem,HealthStatus,@{N='SizeGB';E={To-Gb $_.Size}},@{N='FreeGB';E={To-Gb $_.SizeRemaining}})
     disks = @($disks | Select-Object Number,FriendlyName,SerialNumber,BusType,PartitionStyle,OperationalStatus,HealthStatus,@{N='SizeGB';E={To-Gb $_.Size}})
+    partitions = $partitions
     physicalDiskHealth = @($diskReliability)
     networkAdapters = $netAdapters
     network = @($network)
     security = [ordered]@{
         secureBoot = $secureBoot
+        secureBoot2023CertificateStatus = $secureBoot2023Status
+        secureBoot2023Error = $secureBoot2023Error
+        secureBootRelatedEvents = $secureBootEvents
         tpm = $tpm
+        bitLockerVolumes = $bitlocker
         defender = $defender
         executionPolicy = $executionPolicy
         winHttpProxy = $proxy
+    }
+    recovery = [ordered]@{
+        windowsRE = $winReInfo
+        bitLockerVolumes = $bitlocker
+        note = 'Inventory only. The suite does not modify BitLocker, Windows RE, boot configuration or recovery partitions.'
     }
     updates = $hotfixes
     deviceProblems = $devices
@@ -135,17 +167,21 @@ $inventory = [ordered]@{
 
 $dir = Split-Path $OutputPath -Parent
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-$inventory | ConvertTo-Json -Depth 12 | Set-Content $OutputPath -Encoding UTF8
+$inventory | ConvertTo-Json -Depth 14 | Set-Content $OutputPath -Encoding UTF8
 
+$cpuName = if ($cpu.Count -gt 0) { [string]$cpu[0].Name } else { 'Unknown' }
 Write-Host "DEVICE INVENTORY" -ForegroundColor Cyan
 Write-Host "Computer : $($inventory.computer.manufacturer) $($inventory.computer.model)"
-Write-Host "Windows  : $($inventory.windows.caption) build $($inventory.windows.buildNumber) $($inventory.windows.architecture)"
-Write-Host "CPU      : $($cpu[0].Name)"
+Write-Host "Windows  : $($inventory.windows.caption) build $($inventory.windows.fullBuild) $($inventory.windows.architecture)"
+Write-Host "CPU      : $cpuName"
 Write-Host "Memory   : $($inventory.computer.totalMemoryGB) GB"
 Write-Host "Volumes  : $($volumes.Count)"
 Write-Host "Device problems: $($devices.Count)"
 Write-Host "Auto services not running: $($services.Count)"
 Write-Host "Recent critical/error events: $($recentEvents.Count)"
+if ($secureBoot -eq $true) {
+    Write-Host "Secure Boot 2023 status: $(if($secureBoot2023Status){$secureBoot2023Status}else{'Not reported'})"
+}
 Write-Host "Inventory JSON: $OutputPath"
 
 if (-not $SummaryOnly) {
