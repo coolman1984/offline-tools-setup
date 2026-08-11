@@ -13,17 +13,21 @@ $WorkRoot = Join-Path $RepoRoot 'work\setup-ui'
 $SdkRoot = Join-Path $WorkRoot 'dotnet'
 $SetupPublishRoot = Join-Path $WorkRoot 'publish-setup'
 $ShellPublishRoot = Join-Path $WorkRoot 'publish-shell'
+$SkillsPublishRoot = Join-Path $WorkRoot 'publish-skills'
 $SetupProject = Join-Path $RepoRoot 'installer-ui\OfflineToolsSetup.csproj'
 $ShellProject = Join-Path $RepoRoot 'suite-shell\OfflineToolsSuite.csproj'
+$SkillsProject = Join-Path $RepoRoot 'skills-hub\OfflineSkillsHub.csproj'
 $BootstrapRoot = Join-Path $BundleRoot 'payload\bootstrap'
 $BundleScriptsRoot = Join-Path $BundleRoot 'scripts'
+$BundleConfigRoot = Join-Path $BundleRoot 'config'
+$BundleSkillsRoot = Join-Path $BundleRoot 'skills\catalog'
 $ToolManifest = Get-Content (Join-Path $RepoRoot 'config\tool-manifest.json') -Raw | ConvertFrom-Json
 $RequiredSdk = [string]$ToolManifest.microsoft.dotnetSdk.version
 
 function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 
 Remove-Item $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $WorkRoot,$SdkRoot,$SetupPublishRoot,$ShellPublishRoot,$BootstrapRoot,$BundleScriptsRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $WorkRoot,$SdkRoot,$SetupPublishRoot,$ShellPublishRoot,$SkillsPublishRoot,$BootstrapRoot,$BundleScriptsRoot,$BundleConfigRoot | Out-Null
 
 $Dotnet = $null
 $SystemDotnet = Get-Command dotnet -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue
@@ -47,7 +51,7 @@ if (-not (Test-Path $Dotnet)) { throw "dotnet executable was not found: $Dotnet"
 $ActualSdk = (& $Dotnet --version).Trim()
 if ($ActualSdk -ne $RequiredSdk) { throw "UI SDK mismatch. Required $RequiredSdk, resolved $ActualSdk." }
 
-foreach ($Project in @($SetupProject,$ShellProject)) {
+foreach ($Project in @($SetupProject,$ShellProject,$SkillsProject)) {
     Write-Step "Restoring pinned dependencies: $(Split-Path $Project -Leaf)"
     & $Dotnet restore $Project
     if ($LASTEXITCODE -ne 0) { throw "Restore failed: $Project" }
@@ -67,6 +71,13 @@ $ShellExe = Join-Path $ShellPublishRoot 'OfflineToolsSuite.exe'
 if (-not (Test-Path $ShellExe)) { throw 'Published suite shell executable was not found.' }
 Copy-Item $ShellExe (Join-Path $BootstrapRoot 'OfflineToolsSuite.exe') -Force
 
+Write-Step 'Publishing Windows x64 self-contained Developer Skills Hub'
+& $Dotnet publish $SkillsProject -c Release -r win-x64 --self-contained true -o $SkillsPublishRoot -p:PublishSingleFile=true -p:PublishTrimmed=false --no-restore
+if ($LASTEXITCODE -ne 0) { throw 'Skills Hub publish failed.' }
+$SkillsExe = Join-Path $SkillsPublishRoot 'OfflineSkillsHub.exe'
+if (-not (Test-Path $SkillsExe)) { throw 'Published Skills Hub executable was not found.' }
+Copy-Item $SkillsExe (Join-Path $BootstrapRoot 'OfflineSkillsHub.exe') -Force
+
 Write-Step 'Including target-side diagnostic and Windows Care tools'
 foreach ($Diagnostic in @(
     'Test-OfficeAutomationHealth.ps1','Test-LegacyWindowsRuntimeReadiness.ps1',
@@ -77,6 +88,16 @@ foreach ($Diagnostic in @(
     Copy-Item $Source (Join-Path $BundleScriptsRoot $Diagnostic) -Force
 }
 
+Write-Step 'Including Skills Hub policy and canonical enterprise skill library'
+$SkillsConfig = Join-Path $RepoRoot 'config\skills-hub.json'
+if (-not (Test-Path $SkillsConfig)) { throw 'Skills Hub configuration is missing.' }
+Copy-Item $SkillsConfig (Join-Path $BundleConfigRoot 'skills-hub.json') -Force
+$CanonicalSkills = Join-Path $RepoRoot 'skills\catalog'
+if (-not (Test-Path $CanonicalSkills)) { throw 'Canonical skill catalog is missing.' }
+Remove-Item $BundleSkillsRoot -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $BundleSkillsRoot | Out-Null
+Copy-Item (Join-Path $CanonicalSkills '*') $BundleSkillsRoot -Recurse -Force
+
 [pscustomobject]@{
     builtAtUtc = [DateTime]::UtcNow.ToString('o')
     dotnetSdk = $ActualSdk
@@ -85,8 +106,11 @@ foreach ($Diagnostic in @(
     singleFile = $true
     launcher = 'OfflineToolsSuite.exe'
     setupEngine = 'OfflineToolsSetup.exe'
-} | ConvertTo-Json | Set-Content (Join-Path $BootstrapRoot 'build-info.json') -Encoding UTF8
+    skillsHub = 'OfflineSkillsHub.exe'
+    canonicalSkills = @(Get-ChildItem $BundleSkillsRoot -Directory | Select-Object -ExpandProperty Name)
+} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $BootstrapRoot 'build-info.json') -Encoding UTF8
 
 Write-Host "Tabbed suite shell ready: $(Join-Path $BootstrapRoot 'OfflineToolsSuite.exe')" -ForegroundColor Green
 Write-Host "Professional setup engine ready: $(Join-Path $BootstrapRoot 'OfflineToolsSetup.exe')" -ForegroundColor Green
+Write-Host "Developer Skills Hub ready: $(Join-Path $BootstrapRoot 'OfflineSkillsHub.exe')" -ForegroundColor Green
 Write-Host "Pinned build SDK: $ActualSdk" -ForegroundColor Green

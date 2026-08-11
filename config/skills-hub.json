@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "productName": "Developer Skills Hub",
+  "managedRoot": "C:\\OfflineTools\\SkillsHub",
+  "canonicalLibraryRelativePath": "skills\\catalog",
+  "policies": {
+    "targetDownloadsAllowed": false,
+    "executeImportedScriptsAutomatically": false,
+    "requireValidationBeforeDeploy": true,
+    "backupBeforeReplace": true,
+    "allowNetworkReferencesInDocumentation": true,
+    "allowNetworkCommandsInSkillScripts": false,
+    "warnOnPackageInstallCommands": true,
+    "maxDescriptionCharacters": 1024,
+    "recommendedDescriptionCharacters": 420
+  },
+  "targets": [
+    {
+      "id": "codex",
+      "displayName": "Codex / ChatGPT Desktop",
+      "executables": ["codex.exe", "codex.cmd"],
+      "managedExecutableHints": ["C:\\OfflineTools\\Developer\\CLI-AI\\codex.cmd"],
+      "globalSkillPath": ".agents\\skills",
+      "projectSkillPath": ".agents\\skills",
+      "deploymentMode": "copy",
+      "notes": "Current Codex local skill discovery uses the Agent Skills directories. The same standalone skill format is used by Codex CLI, IDE integration and local desktop surfaces that expose Codex skills."
+    },
+    {
+      "id": "claude-code",
+      "displayName": "Claude Code",
+      "executables": ["claude.exe", "claude.cmd"],
+      "managedExecutableHints": ["C:\\OfflineTools\\Developer\\CLI-AI\\claude.cmd"],
+      "globalSkillPath": ".claude\\skills",
+      "projectSkillPath": ".claude\\skills",
+      "deploymentMode": "copy",
+      "notes": "Claude Code supports personal and project SKILL.md directories. Account-managed Claude/Cowork skills are a separate surface and are not silently modified by this tool."
+    },
+    {
+      "id": "cline",
+      "displayName": "Cline CLI / VS Code",
+      "executables": ["cline.exe", "cline.cmd"],
+      "managedExecutableHints": ["C:\\OfflineTools\\Developer\\CLI-AI\\cline.cmd"],
+      "globalSkillPath": ".cline\\skills",
+      "projectSkillPath": ".cline\\skills",
+      "deploymentMode": "copy",
+      "notes": "Cline CLI and IDE surfaces share the same agent core and support Agent Skills."
+    },
+    {
+      "id": "kilo",
+      "displayName": "Kilo CLI / VS Code",
+      "executables": ["kilo.exe", "kilo.cmd"],
+      "managedExecutableHints": ["C:\\OfflineTools\\Developer\\CLI-AI\\kilo.cmd"],
+      "globalSkillPath": ".kilo\\skills",
+      "projectSkillPath": ".kilo\\skills",
+      "deploymentMode": "copy",
+      "notes": "Kilo supports native Agent Skills and project/global skill locations."
+    },
+    {
+      "id": "opencode",
+      "displayName": "OpenCode CLI / Desktop",
+      "executables": ["opencode.exe", "opencode.cmd"],
+      "managedExecutableHints": ["C:\\OfflineTools\\Developer\\CLI-AI\\opencode.cmd"],
+      "globalSkillPath": ".config\\opencode\\skills",
+      "projectSkillPath": ".opencode\\skills",
+      "deploymentMode": "copy",
+      "notes": "OpenCode supports its native skill directories and also understands compatible Agent Skills directories."
+    }
+  ],
+  "curatedSources": [
+    {
+      "name": "OpenAI Plugins",
+      "url": "https://github.com/openai/plugins",
+      "trustTier": "first-party",
+      "purpose": "Current Codex plugin and skill examples"
+    },
+    {
+      "name": "Anthropic Skills",
+      "url": "https://github.com/anthropics/skills",
+      "trustTier": "first-party",
+      "purpose": "Agent Skills examples including document workflows"
+    },
+    {
+      "name": "Cline Skills",
+      "url": "https://github.com/cline/skills",
+      "trustTier": "first-party",
+      "purpose": "Skills used and published by Cline"
+    },
+    {
+      "name": "Kilo Marketplace",
+      "url": "https://github.com/Kilo-Org/kilo-marketplace",
+      "trustTier": "first-party-curated",
+      "purpose": "Kilo skills, agents and MCP examples"
+    }
+  ],
+  "skillCategories": [
+    "Enterprise Automation",
+    "Office & Documents",
+    "Data & Analytics",
+    "Internal Web Apps",
+    "Knowledge & Second Brain",
+    "Agent Governance",
+    "Developer Productivity"
+  ]
+}

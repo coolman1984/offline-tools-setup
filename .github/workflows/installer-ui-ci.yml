@@ -6,6 +6,8 @@ on:
     paths:
       - 'installer-ui/**'
       - 'suite-shell/**'
+      - 'skills-hub/**'
+      - 'skills/**'
       - 'config/**'
       - 'scripts/**'
       - 'requirements/profiles/**'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'installer-ui/**'
       - 'suite-shell/**'
+      - 'skills-hub/**'
+      - 'skills/**'
       - 'config/**'
       - 'scripts/**'
       - 'requirements/profiles/**'
@@ -25,7 +29,7 @@ on:
 jobs:
   validate-windows-installer:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -40,18 +44,21 @@ jobs:
         run: |
           dotnet restore installer-ui/OfflineToolsSetup.csproj
           dotnet restore suite-shell/OfflineToolsSuite.csproj
+          dotnet restore skills-hub/OfflineSkillsHub.csproj
 
       - name: Build applications
         run: |
           dotnet build installer-ui/OfflineToolsSetup.csproj -c Release --no-restore
           dotnet build suite-shell/OfflineToolsSuite.csproj -c Release --no-restore
+          dotnet build skills-hub/OfflineSkillsHub.csproj -c Release --no-restore
 
       - name: Publish self-contained applications
         run: |
           dotnet publish installer-ui/OfflineToolsSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/setup-ui
           dotnet publish suite-shell/OfflineToolsSuite.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/suite-shell
+          dotnet publish skills-hub/OfflineSkillsHub.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/skills-hub
 
-      - name: Validate JSON and PowerShell syntax
+      - name: Validate JSON PowerShell and canonical skills
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -60,6 +67,7 @@ jobs:
           Get-Content config/developer-stack.json -Raw | ConvertFrom-Json | Out-Null
           Get-Content config/tool-manifest.json -Raw | ConvertFrom-Json | Out-Null
           Get-Content config/windows-care.json -Raw | ConvertFrom-Json | Out-Null
+          Get-Content config/skills-hub.json -Raw | ConvertFrom-Json | Out-Null
 
           $allErrors = @()
           foreach ($file in Get-ChildItem scripts -Filter '*.ps1' -File) {
@@ -73,14 +81,45 @@ jobs:
 
             if ($parseErrors.Count -gt 0) {
               foreach ($err in $parseErrors) {
-                $allErrors += "${($file.Name)}:$($err.Extent.StartLineNumber): $($err.Message)"
+                $allErrors += "$($file.Name):$($err.Extent.StartLineNumber): $($err.Message)"
               }
             }
           }
 
+          $skillDirs = @(Get-ChildItem skills/catalog -Directory)
+          if ($skillDirs.Count -lt 1) { $allErrors += 'Canonical skill catalog is empty.' }
+          foreach ($dir in $skillDirs) {
+            $skillPath = Join-Path $dir.FullName 'SKILL.md'
+            if (-not (Test-Path $skillPath)) {
+              $allErrors += "Missing SKILL.md: $($dir.Name)"
+              continue
+            }
+            $lines = @(Get-Content $skillPath)
+            if ($lines.Count -lt 4 -or $lines[0].Trim() -ne '---') {
+              $allErrors += "Invalid frontmatter start: $($dir.Name)"
+              continue
+            }
+            $end = -1
+            for ($i=1; $i -lt $lines.Count; $i++) {
+              if ($lines[$i].Trim() -eq '---') { $end = $i; break }
+            }
+            if ($end -lt 1) {
+              $allErrors += "Missing frontmatter end: $($dir.Name)"
+              continue
+            }
+            $front = $lines[1..($end-1)]
+            $nameLine = $front | Where-Object { $_ -match '^name:\s*(.+)$' } | Select-Object -First 1
+            $descriptionLine = $front | Where-Object { $_ -match '^description:\s*(.+)$' } | Select-Object -First 1
+            if (-not $nameLine) { $allErrors += "Missing name: $($dir.Name)"; continue }
+            if (-not $descriptionLine) { $allErrors += "Missing description: $($dir.Name)" }
+            $skillName = (($nameLine -replace '^name:\s*','').Trim()).Trim('"').Trim("'")
+            if ($skillName -ne $dir.Name) { $allErrors += "Skill name/folder mismatch: $($dir.Name) => $skillName" }
+            if ($skillName -notmatch '^[a-z0-9]+(-[a-z0-9]+)*$') { $allErrors += "Invalid skill name format: $skillName" }
+          }
+
           if ($allErrors.Count -gt 0) {
             $allErrors | ForEach-Object { Write-Error $_ }
-            throw 'PowerShell syntax validation failed.'
+            throw 'Repository validation failed.'
           }
 
       - name: Verify published executables
@@ -88,7 +127,8 @@ jobs:
         run: |
           $executables = @(
             'artifacts/setup-ui/OfflineToolsSetup.exe',
-            'artifacts/suite-shell/OfflineToolsSuite.exe'
+            'artifacts/suite-shell/OfflineToolsSuite.exe',
+            'artifacts/skills-hub/OfflineSkillsHub.exe'
           )
           foreach ($exe in $executables) {
             if (-not (Test-Path $exe)) { throw "Missing published executable: $exe" }
@@ -104,4 +144,5 @@ jobs:
           path: |
             artifacts/setup-ui/OfflineToolsSetup.exe
             artifacts/suite-shell/OfflineToolsSuite.exe
+            artifacts/skills-hub/OfflineSkillsHub.exe
           if-no-files-found: error
