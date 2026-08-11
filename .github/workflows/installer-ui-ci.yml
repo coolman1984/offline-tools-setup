@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'installer-ui/**'
+      - 'suite-shell/**'
       - 'config/**'
       - 'scripts/**'
       - 'requirements/profiles/**'
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - 'installer-ui/**'
+      - 'suite-shell/**'
       - 'config/**'
       - 'scripts/**'
       - 'requirements/profiles/**'
@@ -34,14 +36,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore UI
-        run: dotnet restore installer-ui/OfflineToolsSetup.csproj
+      - name: Restore applications
+        run: |
+          dotnet restore installer-ui/OfflineToolsSetup.csproj
+          dotnet restore suite-shell/OfflineToolsSuite.csproj
 
-      - name: Build UI
-        run: dotnet build installer-ui/OfflineToolsSetup.csproj -c Release --no-restore
+      - name: Build applications
+        run: |
+          dotnet build installer-ui/OfflineToolsSetup.csproj -c Release --no-restore
+          dotnet build suite-shell/OfflineToolsSuite.csproj -c Release --no-restore
 
-      - name: Publish self-contained UI
-        run: dotnet publish installer-ui/OfflineToolsSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/setup-ui
+      - name: Publish self-contained applications
+        run: |
+          dotnet publish installer-ui/OfflineToolsSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/setup-ui
+          dotnet publish suite-shell/OfflineToolsSuite.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o artifacts/suite-shell
 
       - name: Validate JSON and PowerShell syntax
         shell: pwsh
@@ -51,6 +59,7 @@ jobs:
           Get-Content config/setup-profiles.json -Raw | ConvertFrom-Json | Out-Null
           Get-Content config/developer-stack.json -Raw | ConvertFrom-Json | Out-Null
           Get-Content config/tool-manifest.json -Raw | ConvertFrom-Json | Out-Null
+          Get-Content config/windows-care.json -Raw | ConvertFrom-Json | Out-Null
 
           $allErrors = @()
           foreach ($file in Get-ChildItem scripts -Filter '*.ps1' -File) {
@@ -74,18 +83,25 @@ jobs:
             throw 'PowerShell syntax validation failed.'
           }
 
-      - name: Verify published executable
+      - name: Verify published executables
         shell: pwsh
         run: |
-          $exe = 'artifacts/setup-ui/OfflineToolsSetup.exe'
-          if (-not (Test-Path $exe)) { throw "Missing published executable: $exe" }
-          $size = (Get-Item $exe).Length
-          if ($size -lt 1MB) { throw "Published executable is unexpectedly small: $size bytes" }
-          Write-Host "Published setup UI size: $([Math]::Round($size / 1MB, 1)) MB"
+          $executables = @(
+            'artifacts/setup-ui/OfflineToolsSetup.exe',
+            'artifacts/suite-shell/OfflineToolsSuite.exe'
+          )
+          foreach ($exe in $executables) {
+            if (-not (Test-Path $exe)) { throw "Missing published executable: $exe" }
+            $size = (Get-Item $exe).Length
+            if ($size -lt 1MB) { throw "Published executable is unexpectedly small: $exe ($size bytes)" }
+            Write-Host "$exe size: $([Math]::Round($size / 1MB, 1)) MB"
+          }
 
-      - name: Upload setup UI test artifact
+      - name: Upload Windows UI test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: OfflineToolsSetup-win-x64
-          path: artifacts/setup-ui/OfflineToolsSetup.exe
+          name: OfflineToolsSuite-win-x64
+          path: |
+            artifacts/setup-ui/OfflineToolsSetup.exe
+            artifacts/suite-shell/OfflineToolsSuite.exe
           if-no-files-found: error
