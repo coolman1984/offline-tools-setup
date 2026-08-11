@@ -1,6 +1,6 @@
 # Offline Automation & Development Suite
 
-Professional one-click Windows 10/11 x64 workstation setup for restricted corporate environments.
+Professional one-click Windows 10/11 x64 workstation setup and safe-care toolkit for restricted corporate environments.
 
 ## Target environment
 
@@ -16,9 +16,19 @@ Run:
 START-HERE.cmd
 ```
 
-The launcher opens the self-contained professional setup interface with Windows administrator elevation.
+The launcher opens the self-contained elevated suite shell.
 
-The setup interface provides:
+Top tabs:
+
+```text
+SETUP  |  SAFE REPAIR  |  DEVICE DETAILS  |  LOGS
+```
+
+The shell is keyboard-first, uses an elegant modern terminal layout, and keeps workstation setup separated from Windows repair/diagnostics.
+
+## SETUP
+
+The professional setup engine provides:
 
 - animated workstation preflight scan
 - keyboard navigation
@@ -32,13 +42,69 @@ The setup interface provides:
 - profile-aware validation
 - durable logs, checkpoints and receipts
 
+## SAFE REPAIR
+
+Windows Safe Care is conservative by design.
+
+Read-only presets:
+
+- Quick Health Check
+- Deep Diagnostics
+- All Diagnostics
+
+Custom mode allows individual diagnostics and explicitly selected low/moderate-risk repairs.
+
+Built-in checks include:
+
+- disk-space/candidate analysis
+- pending restart detection
+- DISM component-store checks
+- SFC verify-only
+- online CHKDSK scan
+- physical disk reliability/health
+- Plug and Play device problems
+- critical/error event summaries
+- Windows Update health
+- power/battery diagnostics
+
+Optional safe repairs include:
+
+- stale temporary-file cleanup from approved temp folders only
+- Delivery Optimization cache cleanup using the Windows command
+- supported DISM component cleanup without ResetBase
+- Windows image repair only from a matching pre-bundled local source with network fallback disabled
+- SFC repair
+- reversible-first Windows Update working-cache rebuild
+
+Permanent guardrails prohibit user-folder deletion, registry cleaners, manual WinSxS deletion, Windows Installer cache deletion, boot configuration changes, security-control bypass, automatic driver replacement/removal, DISM ResetBase and automatic offline CHKDSK repair scheduling.
+
+See `docs/WINDOWS-SAFE-CARE.md`.
+
+## DEVICE DETAILS
+
+Read-only device intelligence subviews:
+
+- Overview
+- Network & IP
+- Storage & Disk Health
+- Security & Policy
+- Problems & Events
+- Updates & Services
+
+The suite also writes a structured inventory to:
+
+```text
+C:\OfflineTools\state\device-inventory.json
+```
+
 ## Locked Core Foundation
 
 Every installation includes the common managed foundation:
 
-- Microsoft Visual C++ runtime
+- Microsoft Visual C++ runtimes for x64 and x86
 - PowerShell 7
 - MinGit
+- isolated Portable Git Bash fallback
 - portable VS Code
 - Python 3.11 / 3.12 / 3.13 / 3.14 side-by-side
 - isolated managed Node.js LTS
@@ -47,6 +113,8 @@ Every installation includes the common managed foundation:
 - local Gitea development hub
 
 Existing user Python/Node/Git/VS Code installations are not treated as the managed suite. Managed runtimes live under `C:\OfflineTools` to reduce conflicts with existing projects.
+
+Only `C:\OfflineTools\bin` is exposed as the managed command gateway. Tool directories are not scattered across the machine PATH.
 
 ## Selectable professional profiles
 
@@ -89,18 +157,22 @@ Existing user Python/Node/Git/VS Code installations are not treated as the manag
 - Node backend tooling
 - Python API/backend tooling
 - linting/formatting
+- optional native Microsoft C/C++ build toolchain
+- .NET 10 SDK
+- pre-bundled Node headers for native add-ons
 
 ### AI Coding Tools
 
 Pre-bundled only. Target devices never use extension/package stores.
 
-- Codex
-- Cline
-- Kilo Code
-- OpenCode
+- Codex CLI / VS Code integration
+- Claude Code CLI / VS Code extension
+- Cline CLI / VS Code extension
+- Kilo Code CLI / VS Code extension
+- OpenCode CLI / VS Code extension
 - OpenCode Desktop payload
 
-Claude Code is intentionally excluded from the guaranteed Windows profile because the target corporate policy forbids Git Bash and WSL, which its supported Windows runtime path currently requires.
+PowerShell and Command Prompt remain the primary shells. Portable Git Bash exists only as an isolated compatibility fallback. Claude Code uses the managed Bash path when corporate application-control policy permits it; if Bash execution is blocked, Claude Code alone is unavailable and the rest of the suite remains operational.
 
 ### Testing & Quality
 
@@ -108,15 +180,6 @@ Claude Code is intentionally excluded from the guaranteed Windows profile becaus
 - Ruff
 - mypy
 - formatters
-
-## Presets
-
-- Recommended Professional Setup
-- Automation & Office Workstation
-- Full-Stack Development Workstation
-- Complete Workstation
-- Custom Selection
-- Diagnostics Only
 
 ## Build workflow
 
@@ -126,9 +189,23 @@ On a trusted internet-connected Windows x64 builder PC run:
 BUILD-BUNDLE.cmd
 ```
 
-The builder prepares all runtimes, package stores, VS Code extensions, developer payloads and the self-contained setup UI, then creates the final SHA-256 integrity manifest.
+The builder prepares runtimes, package stores, VS Code extensions, AI/developer payloads, Portable Git Bash, native build tooling, both self-contained interfaces, Windows Care configuration, and the final SHA-256 integrity manifest.
 
 Optional approved native media is supplied under `native-source/` before building.
+
+Optional exact-build Windows repair source layout:
+
+```text
+native-source/windows-repair/<WINDOWS_BUILD>/Windows/
+```
+
+The builder transports those sources as:
+
+```text
+payload/windows-repair/<WINDOWS_BUILD>/Windows/
+```
+
+Windows Care uses them only for matching-build local DISM repair and explicitly disables Windows Update fallback.
 
 ## Reliability model
 
@@ -136,29 +213,34 @@ The suite uses:
 
 - verify-before-install SHA-256 manifest
 - no target-side package/extension downloads
-- Windows-native PowerShell/CMD workflow; no Bash/WSL dependency
+- PowerShell/CMD-first Windows workflow
+- isolated optional Git Bash compatibility fallback
 - side-by-side managed Python versions
 - isolated managed Node runtime
+- local Node headers and native build toolchain
 - bounded Windows Installer busy retries
 - restart-required tracking
 - profile-specific smoke tests
 - bounded Office COM validation
+- conservative Windows Care guardrails
+- evidence-first repairs
 - checkpoint state under `C:\OfflineTools\state`
 - logs under `C:\OfflineTools\logs`
 - plans under `%ProgramData%\OfflineToolsSetup\plans`
 
-The project deliberately does not promise a fake single-transaction rollback across unrelated MSI, EXE, ZIP, Python, Node and database installers. Reliability comes from preflight validation, idempotent managed locations, checkpoints, vendor-supported repair/uninstall and safe resume/repair behavior.
+The project deliberately does not promise a fake single-transaction rollback across unrelated MSI, EXE, ZIP, Python, Node, Windows servicing and database installers. Reliability comes from preflight validation, managed isolated locations, checkpoints, reversible-first maintenance, vendor-supported servicing and safe resume/repair behavior.
 
 ## Repository structure
 
 ```text
-config/                    versions, profiles and policy
+config/                    versions, setup profiles, developer and Windows Care policy
 requirements/profiles/     selectable Python package profiles
-installer-ui/              professional self-contained console UI
-scripts/                   builders, installers and validation
-docs/                      UX architecture and edge-case policy
+installer-ui/              professional setup engine
+suite-shell/               top-level tabbed terminal application
+scripts/                   builders, installers, diagnostics and Windows Care engine
+docs/                      architecture, compatibility and safety policy
 templates/                 offline project templates
-native-source/             optional approved native media
+native-source/             optional approved native/Windows repair media
 offline-bundle/            generated transport bundle (ignored by Git)
 BUILD-BUNDLE.cmd            connected builder entry point
 START-HERE.cmd              restricted target entry point
@@ -166,4 +248,4 @@ START-HERE.cmd              restricted target entry point
 
 ## Validation
 
-GitHub Actions builds the professional UI on Windows, publishes the self-contained x64 executable, validates JSON, parses every PowerShell script, and uploads a test artifact on relevant changes.
+GitHub Actions builds both Windows applications, publishes both self-contained x64 executables, validates all JSON configuration including Windows Care, parses every PowerShell script, verifies the produced executables and uploads a test artifact on relevant changes.
