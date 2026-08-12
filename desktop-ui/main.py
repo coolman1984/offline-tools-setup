@@ -65,9 +65,11 @@ def main() -> int:
     bundle_root = resolve_bundle_root(sys.argv[1:])
     backend = AppBackend(bundle_root)
 
+    qml_dir = Path(__file__).resolve().parent / "qml"
     engine = QQmlApplicationEngine()
+    engine.addImportPath(str(qml_dir))
     engine.rootContext().setContextProperty("backend", backend)
-    qml_path = Path(__file__).resolve().parent / "qml" / "PremiumMain.qml"
+    qml_path = qml_dir / "PremiumMain.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
     if not engine.rootObjects():
         return 2
