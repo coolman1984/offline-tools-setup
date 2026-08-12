@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QTimer, QUrl, Qt
 from PySide6.QtGui import QFont, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -38,7 +38,10 @@ def ensure_windows_admin() -> bool:
 
 
 def main() -> int:
-    if not ensure_windows_admin():
+    smoke_test = "--smoke-test" in sys.argv
+    if smoke_test:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    elif not ensure_windows_admin():
         return 0
 
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "FluentWinUI3")
@@ -50,9 +53,10 @@ def main() -> int:
     app.setApplicationName("Offline Automation & Development Suite")
     app.setOrganizationName("Offline Tools")
     app.setOrganizationDomain("local.offlinetools")
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont("Segoe UI Variable", 10))
 
-    # Keep this product intentionally light even when Windows is using dark mode.
+    # The product intentionally stays light so workstation status and warnings
+    # remain visually consistent on locked-down corporate PCs.
     try:
         app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     except (AttributeError, TypeError):
@@ -61,14 +65,19 @@ def main() -> int:
     bundle_root = resolve_bundle_root(sys.argv[1:])
     backend = AppBackend(bundle_root)
 
+    qml_dir = Path(__file__).resolve().parent / "qml"
     engine = QQmlApplicationEngine()
+    engine.addImportPath(str(qml_dir))
     engine.rootContext().setContextProperty("backend", backend)
-    qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
+    qml_path = qml_dir / "PremiumMain.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
     if not engine.rootObjects():
         return 2
 
-    backend.runPreflight()
+    if smoke_test:
+        QTimer.singleShot(800, app.quit)
+    else:
+        backend.runPreflight()
     return app.exec()
 
 
