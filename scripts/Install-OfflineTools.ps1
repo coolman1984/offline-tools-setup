@@ -1,6 +1,7 @@
 param(
     [string]$InstallRoot = 'C:\OfflineTools',
-    [string[]]$PackageProfiles = @('core','office','pdf','ocr','data-database','web-python','quality')
+    [string[]]$PackageProfiles = @('core','office','pdf','ocr','data-database','web-python','quality'),
+    [switch]$IncludeHeavyOcr
 )
 
 Set-StrictMode -Version Latest
@@ -113,6 +114,18 @@ foreach ($Profile in $UniqueProfiles) {
     Write-Step "Installing offline Python profile: $Profile"
     & $EnvPython -m pip install --no-index --find-links $Wheelhouse -r $RequirementsFile
     if ($LASTEXITCODE -ne 0) { Stop-WithError "Offline Python profile failed: $Profile" 43 }
+}
+
+if ($IncludeHeavyOcr) {
+    $HeavyRequirements = Join-Path $BundleRoot 'requirements\ocr-heavy.txt'
+    $HeavyWheelhouse = Join-Path $BundleRoot "payload\wheelhouse\$PrimaryTag-ocr-heavy"
+    if (-not (Test-Path $HeavyRequirements)) { Stop-WithError "Heavy OCR requirements are missing: $HeavyRequirements" 44 }
+    if (-not (Test-Path $HeavyWheelhouse) -or (Test-Path (Join-Path $HeavyWheelhouse '_missing-packages.txt'))) {
+        Stop-WithError "Heavy OCR wheelhouse is missing or incomplete: $HeavyWheelhouse" 45
+    }
+    Write-Step 'Installing optional heavy OCR packages from the dedicated offline wheelhouse'
+    & $EnvPython -m pip install --no-index --find-links $Wheelhouse --find-links $HeavyWheelhouse -r $HeavyRequirements
+    if ($LASTEXITCODE -ne 0) { Stop-WithError 'Offline heavy OCR package installation failed.' 46 }
 }
 
 "@echo off`r`n`"$EnvPython`" %*" | Set-Content (Join-Path $BinRoot 'python-full.cmd') -Encoding ASCII

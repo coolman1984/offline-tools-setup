@@ -27,10 +27,13 @@ foreach ($candidate in @('python.exe','python','py.exe','py')) {
     if (-not $resolved) { continue }
     try {
         if ($candidate -like 'py*') {
-            $version = & $resolved -3.13 -c "import sys; print('.'.join(map(str,sys.version_info[:2])))" 2>$null
-            if ($LASTEXITCODE -eq 0) { $PythonExe = $resolved; $PythonPrefix = @('-3.13'); break }
+            foreach ($selector in @('-3.13','-3.12','-3.11')) {
+                $version = & $resolved $selector -c "import sys; print('.'.join(map(str,sys.version_info[:2])))" 2>$null
+                if ($LASTEXITCODE -eq 0) { $PythonExe = $resolved; $PythonPrefix = @($selector); break }
+            }
+            if ($PythonExe) { break }
         } else {
-            $version = & $resolved -c "import sys; print('.'.join(map(str,sys.version_info[:2])))" 2>$null
+            $version = & $resolved -c "import sys; assert sys.version_info >= (3,11); print('.'.join(map(str,sys.version_info[:2])))" 2>$null
             if ($LASTEXITCODE -eq 0) { $PythonExe = $resolved; $PythonPrefix = @(); break }
         }
     } catch {}

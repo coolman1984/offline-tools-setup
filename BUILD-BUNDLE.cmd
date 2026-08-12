@@ -13,7 +13,10 @@ echo   Target PCs will perform ZERO software/package downloads.
 echo ============================================================
 echo.
 
-if not exist "%~dp0native-source\vs-build-tools\vs_BuildTools.exe" (
+set "NEED_VS_MEDIA=0"
+if not exist "%~dp0native-source\vs-build-tools\vs_BuildTools.exe" set "NEED_VS_MEDIA=1"
+if not exist "%~dp0native-source\vs-build-tools\Catalog.json" if not exist "%~dp0native-source\vs-build-tools\channelManifest.json" set "NEED_VS_MEDIA=1"
+if "%NEED_VS_MEDIA%"=="1" (
   echo [1/3] Preparing transferable Microsoft C/C++ Build Tools media...
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Prepare-NativeBuildToolsMedia.ps1"
   if errorlevel 1 (
@@ -43,6 +46,12 @@ if defined OFFLINE_TOOLS_SIGNING_THUMBPRINT (
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Protect-BundleWithEnterpriseSigning.ps1" -BundleRoot "%~dp0offline-bundle" -CertificateThumbprint "%OFFLINE_TOOLS_SIGNING_THUMBPRINT%"
   if errorlevel 1 (
     echo ERROR: Enterprise signing failed. Unsigned bundle will NOT be declared ready.
+    pause
+    exit /b 1
+  )
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0offline-bundle\scripts\Verify-OfflineBundle.ps1" -BundleRoot "%~dp0offline-bundle"
+  if errorlevel 1 (
+    echo ERROR: Signed bundle integrity verification failed.
     pause
     exit /b 1
   )

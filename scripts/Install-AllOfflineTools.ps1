@@ -16,8 +16,8 @@ function Test-IsAdministrator {
 if (-not (Test-IsAdministrator)) {
     Write-Host 'Requesting administrator rights...'
     $Args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'-InstallRoot',"`"$InstallRoot`"")
-    Start-Process powershell.exe -Verb RunAs -ArgumentList $Args
-    exit 0
+    $Elevated = Start-Process powershell.exe -Verb RunAs -ArgumentList $Args -Wait -PassThru
+    exit $Elevated.ExitCode
 }
 
 Write-Host 'Verifying the complete bundle before any installation...' -ForegroundColor Cyan

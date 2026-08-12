@@ -71,18 +71,23 @@ foreach ($file in $PowerShellFiles) {
     }
 }
 
-$UiExe = Join-Path $BundleRoot 'payload\bootstrap\OfflineToolsSetup.exe'
-if (Test-Path $UiExe) {
+$UiExecutables = @(Get-ChildItem (Join-Path $BundleRoot 'payload\bootstrap') -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+$SignedUiExecutables = @()
+if ($UiExecutables.Count -eq 0) { throw 'No professional interface executables were found to sign.' }
+if ($UiExecutables.Count -gt 0) {
     $SignTool = Find-SignTool
     if ($SignTool) {
-        Write-Host 'Signing the professional setup executable...' -ForegroundColor Cyan
-        $args = @('sign','/sha1',$cert.Thumbprint,'/fd','SHA256')
-        if ($TimestampUrl) { $args += @('/tr',$TimestampUrl,'/td','SHA256') }
-        $args += $UiExe
-        $proc = Start-Process -FilePath $SignTool -ArgumentList $args -Wait -PassThru
-        if ($proc.ExitCode -ne 0) { throw "signtool failed with exit code $($proc.ExitCode)" }
+        Write-Host 'Signing all professional interface executables...' -ForegroundColor Cyan
+        foreach ($UiExe in $UiExecutables) {
+            $args = @('sign','/sha1',$cert.Thumbprint,'/fd','SHA256')
+            if ($TimestampUrl) { $args += @('/tr',$TimestampUrl,'/td','SHA256') }
+            $args += $UiExe.FullName
+            $proc = Start-Process -FilePath $SignTool -ArgumentList $args -Wait -PassThru
+            if ($proc.ExitCode -ne 0) { throw "signtool failed for $($UiExe.Name) with exit code $($proc.ExitCode)" }
+            $SignedUiExecutables += $UiExe
+        }
     } else {
-        Write-Warning 'signtool.exe was not found. PowerShell scripts were signed, but the setup executable was not signed by this helper.'
+        throw 'signtool.exe was not found; interface executables cannot be declared enterprise-signed.'
     }
 }
 
@@ -93,6 +98,12 @@ foreach ($file in $PowerShellFiles) {
         throw "Signature verification failed: $($file.FullName) => $($signature.Status)"
     }
 }
+foreach ($file in $SignedUiExecutables) {
+    $signature = Get-AuthenticodeSignature $file.FullName
+    if ($signature.Status -ne 'Valid') {
+        throw "Executable signature verification failed: $($file.FullName) => $($signature.Status)"
+    }
+}
 
 Refresh-IntegrityManifest
 [pscustomobject]@{
@@ -101,7 +112,7 @@ Refresh-IntegrityManifest
     certificateThumbprint = $cert.Thumbprint
     timestampUrl = $TimestampUrl
     scriptsSigned = @($PowerShellFiles).Count
-    setupExeSigningAttempted = (Test-Path $UiExe)
+    interfaceExecutablesSigningAttempted = @($UiExecutables).Count
 } | ConvertTo-Json | Set-Content (Join-Path $BundleRoot 'enterprise-signing.json') -Encoding UTF8
 Refresh-IntegrityManifest
 

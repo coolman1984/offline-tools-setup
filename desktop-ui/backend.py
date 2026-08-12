@@ -195,11 +195,12 @@ class AppBackend(QObject):
         include_all = preset_id == "complete"
         for profile in self.setup_config.get("profiles", []):
             profile_id = profile.get("id", "")
-            if profile_id not in self._selected_profiles:
+            if profile_id not in self._selected_profiles or not self._profile_available(profile_id):
+                self._selected_profiles.discard(profile_id)
                 continue
             chosen: set[str] = set()
             for component in profile.get("components", []):
-                if component.get("supported", True) is False:
+                if component.get("supported", True) is False or not self._component_available(component.get("id", "")):
                     continue
                 if include_all or component.get("selectedByDefault", False):
                     chosen.add(component.get("id", ""))
@@ -208,11 +209,14 @@ class AppBackend(QObject):
     @Slot(str, bool)
     def setProfileSelected(self, profile_id: str, selected: bool) -> None:
         if selected:
+            if not self._profile_available(profile_id):
+                self.toastRequested.emit("Profile unavailable", "Required local installation media is not included in this bundle.")
+                return
             self._selected_profiles.add(profile_id)
             profile = self._profile_by_id(profile_id)
             self._selected_components.setdefault(
                 profile_id,
-                {c.get("id", "") for c in profile.get("components", []) if c.get("selectedByDefault", False) and c.get("supported", True) is not False},
+                {c.get("id", "") for c in profile.get("components", []) if c.get("selectedByDefault", False) and c.get("supported", True) is not False and self._component_available(c.get("id", ""))},
             )
         else:
             self._selected_profiles.discard(profile_id)
@@ -223,6 +227,9 @@ class AppBackend(QObject):
 
     @Slot(str, str, bool)
     def setComponentSelected(self, profile_id: str, component_id: str, selected: bool) -> None:
+        if selected and not self._component_available(component_id):
+            self.toastRequested.emit("Component unavailable", "Required local installation media is not included in this bundle.")
+            return
         if profile_id not in self._selected_profiles:
             self._selected_profiles.add(profile_id)
         bucket = self._selected_components.setdefault(profile_id, set())
@@ -241,6 +248,31 @@ class AppBackend(QObject):
     @Slot(str, str, result=bool)
     def isComponentSelected(self, profile_id: str, component_id: str) -> bool:
         return component_id in self._selected_components.get(profile_id, set())
+
+    @Slot(str, result=bool)
+    def componentAvailable(self, component_id: str) -> bool:
+        return self._component_available(component_id)
+
+    @Slot(str, result=bool)
+    def profileAvailable(self, profile_id: str) -> bool:
+        return self._profile_available(profile_id)
+
+    def _component_available(self, component_id: str) -> bool:
+        requirements = {
+            "tesseract": "TesseractMediaPresent",
+            "sql-server-express": "SqlServerMediaPresent",
+            "webview2": "WebView2MediaPresent",
+            "advanced-ocr": "HeavyOcrPresent",
+        }
+        if component_id in {"dotnet-sdk-10", "msvc-build-tools", "windows-sdk", "cmake", "node-gyp", "node-headers"}:
+            return bool(self._preflight.get("VisualStudioBuildToolsMediaPresent", False))
+        key = requirements.get(component_id)
+        return True if key is None else bool(self._preflight.get(key, False))
+
+    def _profile_available(self, profile_id: str) -> bool:
+        if profile_id == "native-build":
+            return bool(self._preflight.get("VisualStudioBuildToolsMediaPresent", False))
+        return True
 
     @Slot(str, result=str)
     def componentHint(self, component_id: str) -> str:
@@ -325,7 +357,13 @@ class AppBackend(QObject):
         result["BundleManifestPresent"] = (self.bundle_root / "bundle-sha256.json").is_file()
         result["SqlServerMediaPresent"] = (self.bundle_root / "payload/native/sql-server-express/setup.exe").is_file()
         result["TesseractMediaPresent"] = (self.bundle_root / "payload/native/tesseract/tesseract-installer.exe").is_file()
-        result["ProfessionalUiPresent"] = True
+        result["VisualStudioBuildToolsMediaPresent"] = (self.bundle_root / "payload/native/vs-build-tools/vs_BuildTools.exe").is_file()
+        result["WebView2MediaPresent"] = (self.bundle_root / "payload/native/webview2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe").is_file()
+        heavy_ocr_dirs = list((self.bundle_root / "payload/wheelhouse").glob("py*-ocr-heavy"))
+        result["HeavyOcrPresent"] = bool(heavy_ocr_dirs) and all(
+            any(path.glob("*.whl")) and not (path / "_missing-packages.txt").exists() for path in heavy_ocr_dirs
+        )
+        result["ProfessionalUiPresent"] = (self.bundle_root / "payload/bootstrap/OfflineToolsDesktop.exe").is_file()
         result["ScanRunning"] = False
         result["ScannedAt"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         self._preflightScanned.emit(result)
@@ -334,6 +372,9 @@ class AppBackend(QObject):
     def _apply_preflight(self, result: object) -> None:
         if isinstance(result, dict):
             self._preflight = result
+        if self._active_preset != "custom":
+            self._apply_preset_internal(self._active_preset)
+            self._selection_version += 1
         self.preflightChanged.emit()
         self.selectionChanged.emit()
         self.toastRequested.emit("Device scan complete", "Workstation readiness has been refreshed.")
@@ -361,6 +402,8 @@ class AppBackend(QObject):
                 raise RuntimeError("This bundle targets Windows 10/11 x64.")
             if self._preflight.get("IsAdministrator") is False:
                 raise RuntimeError("Administrator rights are required for workstation setup.")
+            if not self._preflight.get("BundleManifestPresent") or not self._preflight.get("ProfessionalUiPresent"):
+                raise RuntimeError("The offline bundle is incomplete or corrupted. Rebuild it before installing.")
             if self._preflight.get("FreeDiskGb", 0) and not summary.get("enoughSpace", True):
                 raise RuntimeError("The selected plan needs more free disk space.")
             plan_path = self._write_setup_plan()
@@ -728,7 +771,10 @@ class AppBackend(QObject):
             "BundleManifestPresent": False,
             "SqlServerMediaPresent": False,
             "TesseractMediaPresent": False,
-            "ProfessionalUiPresent": True,
+            "VisualStudioBuildToolsMediaPresent": False,
+            "WebView2MediaPresent": False,
+            "HeavyOcrPresent": False,
+            "ProfessionalUiPresent": False,
             "ScanRunning": False,
             "ScannedAt": "Not scanned yet",
         }
