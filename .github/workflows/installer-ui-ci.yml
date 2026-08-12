@@ -70,6 +70,7 @@ jobs:
           } finally {
             Pop-Location
           }
+          python desktop-ui/main.py --bundle-root "$PWD" --smoke-test
 
       - name: Publish self-contained applications
         run: |
