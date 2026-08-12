@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'desktop-ui/**'
       - 'installer-ui/**'
       - 'suite-shell/**'
       - 'skills-hub/**'
@@ -15,6 +16,7 @@ on:
       - '.github/workflows/installer-ui-ci.yml'
   pull_request:
     paths:
+      - 'desktop-ui/**'
       - 'installer-ui/**'
       - 'suite-shell/**'
       - 'skills-hub/**'
@@ -40,7 +42,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Setup Python for skill scenarios
+      - name: Setup Python for validation and desktop UI
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -56,6 +58,18 @@ jobs:
           dotnet build installer-ui/OfflineToolsSetup.csproj -c Release --no-restore
           dotnet build suite-shell/OfflineToolsSuite.csproj -c Release --no-restore
           dotnet build skills-hub/OfflineSkillsHub.csproj -c Release --no-restore
+
+      - name: Validate PySide6 desktop source and QML
+        shell: pwsh
+        run: |
+          python -m py_compile desktop-ui/main.py desktop-ui/backend.py
+          python -m pip install --disable-pip-version-check -r desktop-ui/requirements.txt
+          Push-Location desktop-ui
+          try {
+            pyside6-project qmllint
+          } finally {
+            Pop-Location
+          }
 
       - name: Publish self-contained applications
         run: |
