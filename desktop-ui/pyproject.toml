@@ -11,6 +11,7 @@ files = [
   "backend.py",
   "qml/Main.qml",
   "qml/PremiumMain.qml",
+  "qml/qmldir",
   "qml/UiTokens.qml",
   "qml/SurfaceCard.qml",
   "qml/StatusPill.qml",
