@@ -35,8 +35,16 @@ function Get-RemoteFile {
     param(
         [Parameter(Mandatory=$true)][string]$Url,
         [Parameter(Mandatory=$true)][string]$Destination,
-        [string]$ExpectedSha256
+        [string]$ExpectedSha256,
+        # Only for callers that verify integrity themselves right after this
+        # call returns (e.g. against a vendor-published checksum manifest).
+        # Every other caller must supply -ExpectedSha256.
+        [switch]$SkipVerification
     )
+
+    if (-not $ExpectedSha256 -and -not $SkipVerification) {
+        throw "Refusing to download without integrity verification: $Url. Add a sha256 to the manifest entry, or pass -SkipVerification if this file is verified by the caller immediately afterward."
+    }
 
     New-Item -ItemType Directory -Force -Path (Split-Path $Destination -Parent) | Out-Null
 
@@ -131,9 +139,11 @@ Write-Step 'Downloading Node.js LTS installer and portable builder runtime'
 $NodeMsi = Join-Path $NodeInstallerDir $Manifest.node.msiFile
 $NodeZip = Join-Path $NodeInstallerDir $Manifest.node.zipFile
 $NodeShasums = Join-Path $NodeInstallerDir 'SHASUMS256.txt'
-Get-RemoteFile -Url $Manifest.node.msiUrl -Destination $NodeMsi
-Get-RemoteFile -Url $Manifest.node.zipUrl -Destination $NodeZip
-Get-RemoteFile -Url $Manifest.node.shasumsUrl -Destination $NodeShasums
+# The .msi/.zip are verified below against SHASUMS256.txt. SHASUMS256.txt
+# itself has nothing to check it against but the vendor's TLS certificate.
+Get-RemoteFile -Url $Manifest.node.msiUrl -Destination $NodeMsi -SkipVerification
+Get-RemoteFile -Url $Manifest.node.zipUrl -Destination $NodeZip -SkipVerification
+Get-RemoteFile -Url $Manifest.node.shasumsUrl -Destination $NodeShasums -SkipVerification
 
 foreach ($NodeFile in @($Manifest.node.msiFile, $Manifest.node.zipFile)) {
     $Line = Get-Content $NodeShasums | Where-Object { $_ -match ("\s" + [regex]::Escape($NodeFile) + '$') } | Select-Object -First 1

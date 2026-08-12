@@ -1,4 +1,4 @@
-pytesseract
-Pillow
-opencv-python
-rapidfuzz
+pytesseract==0.3.13
+Pillow==12.3.0
+opencv-python==5.0.0.93
+rapidfuzz==3.14.5

@@ -16,15 +16,19 @@ Run:
 START-HERE.cmd
 ```
 
-The launcher opens the self-contained elevated suite shell.
+The launcher opens the self-contained elevated **desktop control surface** (PySide6 + Qt Quick, `desktop-ui/`) when it is present in the bundle:
 
-Top tabs:
+```text
+Home  |  Setup  |  Safe Repair  |  Device Details  |  Skills Hub  |  Logs & Evidence
+```
+
+If the desktop executable is missing from the bundle, `START-HERE.cmd` falls back in order to the tabbed console suite shell, then the setup engine alone, then the legacy console installer — each with a plain-English explanation rather than a silent failure:
 
 ```text
 SETUP  |  SAFE REPAIR  |  DEVICE DETAILS  |  LOGS
 ```
 
-The shell is keyboard-first, uses an elegant modern terminal layout, and keeps workstation setup separated from Windows repair/diagnostics.
+Both interfaces keep workstation setup separated from Windows repair/diagnostics and drive the same PowerShell engines under `scripts/`. See `desktop-ui/README.md` for the desktop control surface's architecture and local-development instructions.
 
 ## SETUP
 
@@ -106,6 +110,12 @@ The suite also writes the full inventory to:
 ```text
 C:\OfflineTools\state\device-inventory.json
 ```
+
+## Skills Hub
+
+A canonical local library of AI development skills lives under `skills/catalog/`. Each skill carries a `SKILL.md` contract, starter templates and deterministic validation scripts, and can be published to whichever supported AI coding tools are detected on the workstation (Codex, Claude Code, Cline, Kilo Code, OpenCode) without any of them maintaining a separate copy.
+
+The desktop UI's Skills Hub page provides search, validation status and AI-target detection directly; the standalone `skills-hub/` engine handles advanced deployment, creation, import and Project Brain operations during the interface migration. See `docs/SKILLS-HUB-ARCHITECTURE.md`.
 
 ## Locked Core Foundation
 
@@ -257,8 +267,11 @@ The project deliberately does not promise a fake single-transaction rollback acr
 ```text
 config/                    versions, setup profiles, developer and Windows Care policy
 requirements/profiles/     selectable Python package profiles
-installer-ui/              professional setup engine
-suite-shell/               top-level tabbed terminal application
+desktop-ui/                primary PySide6/Qt Quick desktop control surface
+installer-ui/              professional setup engine (console-fallback UI)
+suite-shell/               tabbed terminal application (console-fallback UI)
+skills-hub/                standalone Skills Hub engine (advanced operations)
+skills/catalog/            canonical local AI development skill library
 scripts/                   builders, installers, diagnostics and Windows Care engine
 docs/                      architecture, compatibility and safety policy
 templates/                 offline project templates
@@ -270,4 +283,12 @@ START-HERE.cmd              restricted target entry point
 
 ## Validation
 
-GitHub Actions builds both Windows applications, publishes both self-contained x64 executables, validates all JSON configuration including Windows Care, parses every PowerShell script, verifies the produced executables and uploads a test artifact on relevant changes.
+GitHub Actions builds the PySide6 desktop control surface and the console-fallback Windows applications, publishes all self-contained x64 executables, runs the desktop UI's pytest suite and QML lint, validates all JSON configuration including Windows Care, parses every PowerShell script, validates the canonical skill catalog and its executable scenario tests, verifies the produced executables and uploads a test artifact on relevant changes.
+
+## Contributing
+
+See `CONTRIBUTING.md` for how to propose a change and which checks to run locally, and `SECURITY.md` to report a vulnerability privately.
+
+## License
+
+MIT — see `LICENSE`.

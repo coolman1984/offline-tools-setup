@@ -7,3 +7,6 @@ dependencies = ["PySide6==6.11.1"]
 
 [tool.pyside6-project]
 files = ["main.py", "backend.py", "qml/Main.qml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -13,3 +13,5 @@ work/
 *.tgz
 npm-cache/
 wheelhouse/
+__pycache__/
+.pytest_cache/

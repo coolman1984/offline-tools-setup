@@ -4,7 +4,7 @@
     "productName": "Offline Automation & Development Suite",
     "subtitle": "Professional Windows 10/11 workstation setup",
     "defaultLanguage": "en",
-    "supportedLanguages": ["en", "ar"],
+    "supportedLanguages": ["en"],
     "minimumConsoleWidth": 92,
     "minimumConsoleHeight": 28
   },

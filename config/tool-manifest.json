@@ -26,13 +26,17 @@
         "version": "3.12.10",
         "role": "compatibility",
         "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
-        "file": "python-3.12.10-amd64.exe"
+        "file": "python-3.12.10-amd64.exe",
+        "sha256": "",
+        "sha256Todo": "Missing. Copy the SHA-256 for the 64-bit Windows installer from https://www.python.org/downloads/release/python-31210/ before building — Build-OfflineBundle.ps1 refuses to download this file without it."
       },
       {
         "version": "3.11.9",
         "role": "legacy-compatibility",
         "url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe",
-        "file": "python-3.11.9-amd64.exe"
+        "file": "python-3.11.9-amd64.exe",
+        "sha256": "",
+        "sha256Todo": "Missing. Copy the SHA-256 for the 64-bit Windows installer from https://www.python.org/downloads/release/python-3119/ before building — Build-OfflineBundle.ps1 refuses to download this file without it."
       }
     ]
   },
