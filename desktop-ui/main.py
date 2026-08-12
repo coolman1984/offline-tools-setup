@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QTimer, QUrl, Qt
 from PySide6.QtGui import QFont, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -38,7 +38,10 @@ def ensure_windows_admin() -> bool:
 
 
 def main() -> int:
-    if not ensure_windows_admin():
+    smoke_test = "--smoke-test" in sys.argv
+    if smoke_test:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    elif not ensure_windows_admin():
         return 0
 
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "FluentWinUI3")
@@ -69,7 +72,10 @@ def main() -> int:
     if not engine.rootObjects():
         return 2
 
-    backend.runPreflight()
+    if smoke_test:
+        QTimer.singleShot(800, app.quit)
+    else:
+        backend.runPreflight()
     return app.exec()
 
 
