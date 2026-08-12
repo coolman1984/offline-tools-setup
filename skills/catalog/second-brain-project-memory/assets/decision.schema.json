@@ -1,0 +1,4 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:offline-tools:project-brain-decision:1","type":"object","required":["schema_version","id","decision","decided_on","context","rationale"],
+ "properties":{"schema_version":{"const":"1.0"},"id":{"type":"string"},"decision":{"type":"string"},"decided_on":{"type":"string"},"context":{"type":"string"},"rationale":{"type":"string"},"alternatives":{"type":"array","items":{"type":"string"}},"constraints":{"type":"array","items":{"type":"string"}},"evidence_ids":{"type":"array","items":{"type":"string"}},"supersedes":{"type":"array","items":{"type":"string"}},"superseded_by":{"type":["string","null"]}},"additionalProperties":true
+}

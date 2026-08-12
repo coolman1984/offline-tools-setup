@@ -4,7 +4,7 @@ description: Use when building a corporate internal full-stack web application t
 compatibility: Internal corporate web server; pre-bundled Node/Python/.NET and approved SQL infrastructure.
 metadata:
   category: Internal Web Apps
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Full-Stack Internal Web App
@@ -97,3 +97,13 @@ Document:
 ## Edge cases
 
 Handle concurrent users, stale sessions, duplicate uploads, worker crash, server restart, DB outage, disk full, partial publish, schema migration mismatch, proxy timeouts, large result sets, old browser cache, expired authentication and version skew between frontend/backend.
+
+## Execution pack
+
+Use:
+
+- `assets/internal-app-contract.schema.json`
+- `templates/project-layout.md`
+- `scenarios/README.md`
+
+Create a versioned runtime/deployment contract before coding substantial infrastructure. Use the project layout as a separation-of-concerns baseline, then adapt only when the application has a documented reason.

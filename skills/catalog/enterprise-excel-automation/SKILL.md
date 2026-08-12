@@ -4,7 +4,7 @@ description: Use for enterprise Excel automation where workbooks must be read fa
 compatibility: Windows 10/11 enterprise workstation with the Offline Automation & Development Suite.
 metadata:
   category: Enterprise Automation
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Enterprise Excel Automation
@@ -118,8 +118,16 @@ Create at minimum:
 - `analysis-result.json`
 - validation/evidence report
 
-`analysis-result.json` should be presentation-ready and contain only validated metrics/series/tables/findings needed by downstream reporting.
+## Execution pack
 
-## Safety
+Use the bundled execution assets instead of inventing new incompatible formats:
 
-Never alter the original workbook unless the task explicitly requests an edited copy. Never weaken corporate protection. Never automate around an access denial. Use the current authorized Office session only as a compatibility reader/writer when ordinary file APIs cannot represent the authorized user experience.
+- `assets/source-receipt.schema.json`
+- `assets/workbook-manifest.schema.json`
+- `assets/analysis-result.schema.json`
+- `assets/sample-analytics.sql`
+- `scripts/create_sample_duckdb.py`
+- `scripts/validate_run.py`
+- `scenarios/README.md`
+
+Before publishing a real run, validate the three JSON contracts and reconcile deterministic totals. Use the sample DuckDB generator as a smoke test for the local analytical runtime.

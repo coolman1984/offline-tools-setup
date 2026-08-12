@@ -5,6 +5,7 @@ packaging
 requests
 httpx
 pydantic
+jsonschema
 python-dotenv
 rich
 typer

@@ -4,7 +4,7 @@ description: Use for enterprise Microsoft Office automation across Excel, Word a
 compatibility: Windows enterprise workstation with Microsoft Office where application automation is required; offline document libraries where direct formats are sufficient.
 metadata:
   category: Office & Documents
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Office Document Automation
@@ -77,3 +77,14 @@ When Office-native rendering is required, export through the authorized installe
 ## Evidence
 
 Record source hash, output hash, tool path used, Office version if applicable, warnings, validation checks and output locations.
+
+## Execution pack
+
+Use the bundled job contract and validators:
+
+- `assets/document-job.schema.json`
+- `templates/document-job.example.json`
+- `scripts/validate_office_output.py`
+- `scenarios/README.md`
+
+Generated OOXML artifacts must pass package integrity checks before delivery. Native Office validation may add rendering/visual checks on top of the structural validator when the installed application is available.

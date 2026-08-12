@@ -1,0 +1,4 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:offline-tools:internal-app-contract:1","type":"object","required":["schema_version","app","runtime","ports","health"],
+ "properties":{"schema_version":{"const":"1.0"},"app":{"type":"object","required":["name","version"]},"runtime":{"type":"object","required":["frontend","backend"]},"ports":{"type":"array","items":{"type":"object","required":["name","port"],"properties":{"name":{"type":"string"},"port":{"type":"integer","minimum":1,"maximum":65535}}}},"health":{"type":"object","required":["path"],"properties":{"path":{"type":"string"},"expected_status":{"type":"integer"}}},"storage":{"type":"object"},"database":{"type":"object"},"security":{"type":"object"}},"additionalProperties":true
+}

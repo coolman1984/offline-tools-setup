@@ -1,0 +1,16 @@
+{
+  "schema_version":"1.0",
+  "run_id":"run-fixture-001",
+  "workflow":"weekly-management-report",
+  "state":"completed",
+  "started_at_utc":"2026-08-12T00:00:00Z",
+  "completed_at_utc":"2026-08-12T00:05:00Z",
+  "inputs":[{"id":"source-1","sha256":"fixture"}],
+  "mapping_version":"mapping-3",
+  "calculation_version":"calc-7",
+  "idempotency_key":"sample-report|2026-W32|fixture",
+  "controls":[{"id":"required-columns","status":"passed","evidence":"validation/required-columns.json"},{"id":"totals-reconcile","status":"passed","evidence":"validation/reconciliation.json"}],
+  "outputs":[{"path":"analysis-result.json","kind":"presentation-contract"}],
+  "warnings":[],
+  "approvals":[]
+}

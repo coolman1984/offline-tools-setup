@@ -1,0 +1,8 @@
+{
+  "schema_version":"1.0",
+  "job_id":"office-fixture-001",
+  "operation":"generate",
+  "source":null,
+  "output":{"path":"output/management-report.pptx","sha256":null,"kind":"pptx"},
+  "validation":{"status":"pending","checks":["package-reopen","slide-bounds","text-overflow","expected-slide-count"],"warnings":[]}
+}

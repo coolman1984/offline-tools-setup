@@ -4,7 +4,7 @@ description: Use when a project needs durable local knowledge: extract entities,
 compatibility: Local Markdown/JSON project vault; optional Obsidian-compatible browsing without requiring Obsidian-specific features.
 metadata:
   category: Knowledge & Second Brain
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Second Brain Project Memory
@@ -111,3 +111,15 @@ Reports should reference fact/source IDs. New analysis can become a report witho
 ## Exports
 
 When useful, provide machine-readable exports such as JSON/CSV and relationship-friendly JSON-LD, while Markdown remains the readable canonical project notebook.
+
+## Execution pack
+
+Use the bundled memory contracts and validator:
+
+- `assets/fact.schema.json`
+- `assets/decision.schema.json`
+- `templates/PROJECT-BRAIN.template.md`
+- `scripts/validate_brain.py`
+- `scenarios/README.md`
+
+A project brain is not complete merely because Markdown exists. Validate structured facts/decisions, preserve unique IDs and keep the readable project summary synchronized with the active records.

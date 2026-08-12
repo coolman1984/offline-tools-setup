@@ -1,0 +1,7 @@
+{
+  "schema_version":"1.0",
+  "source":{"path":"input/report.pdf","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},
+  "method":["native-text","render"],
+  "pages":[{"number":1,"rotation":0,"text_chars":1200,"ocr":false,"warnings":[]}],
+  "validation":{"status":"passed","checks":["reopen","page-count","sample-render"]}
+}

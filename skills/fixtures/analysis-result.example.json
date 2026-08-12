@@ -1,0 +1,12 @@
+{
+  "schema_version":"1.0",
+  "report":{"id":"sample-sales","title":"Sample Sales","generated_at_utc":"2026-08-12T00:00:00Z","source_run_id":"fixture-001"},
+  "periods":["2026-W31","2026-W32"],
+  "active_period":"2026-W32",
+  "kpis":[{"id":"revenue","label":"Revenue","value":243000,"unit":"EGP","target":227000,"evidence_ids":["ev-1"]}],
+  "charts":[{"id":"revenue","series":[{"name":"Revenue","values":[222000,243000]}]}],
+  "tables":[{"id":"detail","columns":[{"key":"period","label":"Period"},{"key":"revenue","label":"Revenue"}],"rows":[{"period":"2026-W31","revenue":222000},{"period":"2026-W32","revenue":243000}]}],
+  "insights":[{"text":"Revenue increased in the latest sample period.","evidence_ids":["ev-1"]}],
+  "warnings":[],
+  "evidence":[{"id":"ev-1","kind":"query","reference":"v_period_summary"}]
+}

@@ -1,0 +1,4 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:offline-tools:pdf-job:1","type":"object","required":["schema_version","source","method","pages","validation"],
+ "properties":{"schema_version":{"const":"1.0"},"source":{"type":"object","required":["path","sha256"]},"method":{"type":"array","items":{"enum":["native-text","layout","render","ocr","create","repair"]}},"pages":{"type":"array","items":{"type":"object","required":["number"],"properties":{"number":{"type":"integer","minimum":1},"rotation":{"type":"integer"},"text_chars":{"type":"integer","minimum":0},"ocr":{"type":"boolean"},"warnings":{"type":"array"}}}},"validation":{"type":"object","required":["status"],"properties":{"status":{"enum":["passed","failed","warning"]},"checks":{"type":"array"}}}},"additionalProperties":true
+}

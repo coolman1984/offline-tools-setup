@@ -4,7 +4,7 @@ description: Use when validated business data or analysis JSON must become a pol
 compatibility: Offline-capable HTML/CSS/JavaScript or approved internal web application stack.
 metadata:
   category: Enterprise Automation
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Enterprise Dashboard Automation
@@ -112,3 +112,14 @@ Handle:
 ## Output
 
 Produce a self-contained static dashboard or internal web app according to the deployment architecture, plus a clear data contract and build/run instructions. All visual claims must be traceable to the validated result JSON.
+
+## Execution pack
+
+Start from the bundled contracts and shell:
+
+- `assets/dashboard-spec.schema.json`
+- `templates/dashboard-shell.html`
+- `scripts/validate_dashboard.py`
+- `scenarios/README.md`
+
+The shell deliberately has no public CDN dependency and implements loading, period selection, KPI cards, a lightweight chart surface, insights and a detail table. Replace or extend sections only after preserving the same validated presentation contract.

@@ -29,7 +29,7 @@ on:
 jobs:
   validate-windows-installer:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -39,6 +39,11 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+
+      - name: Setup Python for skill scenarios
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
 
       - name: Restore applications
         run: |
@@ -121,6 +126,15 @@ jobs:
             $allErrors | ForEach-Object { Write-Error $_ }
             throw 'Repository validation failed.'
           }
+
+      - name: Validate skill execution packs
+        run: python scripts/Test-SkillExecutionPacks.py
+
+      - name: Run executable skill scenarios
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check jsonschema duckdb pypdf pymupdf
+          python scripts/Run-SkillScenarioTests.py
 
       - name: Verify published executables
         shell: pwsh

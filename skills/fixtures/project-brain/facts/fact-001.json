@@ -1,0 +1,1 @@
+{"schema_version":"1.0","id":"fact-001","statement":"The sample reporting cadence is weekly.","entities":["sample-report"],"effective_date":"2026-08-01","recorded_at_utc":"2026-08-12T00:00:00Z","status":"active","confidence":1.0,"sources":[{"id":"source-001","location":"fixture"}],"supersedes":[],"notes":null}

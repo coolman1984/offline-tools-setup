@@ -4,7 +4,7 @@ description: Use when creating, reviewing or evolving agent skills for the devel
 compatibility: Agent Skills-compatible AI coding tools managed by Developer Skills Hub.
 metadata:
   category: Developer Productivity
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Skill Authoring Governance
@@ -91,3 +91,14 @@ A skill is not “good” because its prose sounds intelligent. It is good when 
 ## Evolution
 
 Version skills. Preserve changelog/decision notes for major behavior changes. Update the canonical library first, validate it, then deploy through Skills Hub so clients stay synchronized.
+
+## Execution pack
+
+Use:
+
+- `assets/skill-package.schema.json`
+- `templates/SKILL.template.md`
+- `scripts/validate_skill_package.py`
+- `scenarios/README.md`
+
+A material skill should ship with at least one machine-readable contract or deterministic helper when its workflow benefits from one, plus realistic scenarios. Validation warnings never become automatic permission to execute imported scripts.

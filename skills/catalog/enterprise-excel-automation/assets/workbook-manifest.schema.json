@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:offline-tools:enterprise-excel:workbook-manifest:1",
+  "type": "object",
+  "required": ["schema_version", "workbook", "worksheets"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "workbook": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "date_system": {"enum": ["1900", "1904", "unknown"]}, "calculation_mode": {"type": ["string", "null"]}}},
+    "worksheets": {"type": "array", "items": {"type": "object", "required": ["name", "index", "visibility"], "properties": {"name": {"type": "string"}, "index": {"type": "integer", "minimum": 0}, "visibility": {"enum": ["visible", "hidden", "very-hidden"]}, "used_range": {"type": ["string", "null"]}, "tables": {"type": "array"}, "merged_ranges": {"type": "array"}, "charts": {"type": "array"}, "shapes": {"type": "array"}, "style_table": {"type": "array"}}}},
+    "unsupported": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

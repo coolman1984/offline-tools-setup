@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:offline-tools:analysis-result:1",
+  "type": "object",
+  "required": ["schema_version", "report", "periods", "kpis", "charts", "tables", "evidence"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "report": {"type": "object", "required": ["id", "generated_at_utc"], "properties": {"id": {"type": "string"}, "generated_at_utc": {"type": "string"}, "source_run_id": {"type": "string"}}},
+    "periods": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "active_period": {"type": ["string", "null"]},
+    "kpis": {"type": "array", "items": {"type": "object", "required": ["id", "label", "value"], "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "value": {"type": ["number", "integer", "null"]}, "unit": {"type": ["string", "null"]}, "target": {"type": ["number", "integer", "null"]}, "evidence_ids": {"type": "array", "items": {"type": "string"}}}}},
+    "charts": {"type": "array"},
+    "tables": {"type": "array"},
+    "insights": {"type": "array"},
+    "warnings": {"type": "array"},
+    "evidence": {"type": "array", "items": {"type": "object", "required": ["id", "kind"], "properties": {"id": {"type": "string"}, "kind": {"type": "string"}, "reference": {"type": ["string", "null"]}}}}
+  },
+  "additionalProperties": true
+}

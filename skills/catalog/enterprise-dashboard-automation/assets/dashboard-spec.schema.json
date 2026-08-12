@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:offline-tools:dashboard-spec:1",
+  "type": "object",
+  "required": ["schema_version", "title", "data_file", "sections"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "title": {"type": "string", "minLength": 1},
+    "data_file": {"type": "string"},
+    "theme": {"enum": ["light", "dark", "system"]},
+    "period_control": {"type": "boolean"},
+    "sections": {"type": "array", "items": {"type": "object", "required": ["id", "type"], "properties": {"id": {"type": "string"}, "type": {"enum": ["kpis", "chart", "table", "insights", "warnings", "comparison"]}, "title": {"type": "string"}, "source": {"type": ["string", "null"]}}}},
+    "motion": {"type": "object", "properties": {"enabled": {"type": "boolean"}, "max_ms": {"type": "integer", "minimum": 0, "maximum": 1000}}}
+  },
+  "additionalProperties": true
+}

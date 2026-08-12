@@ -1,0 +1,8 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"urn:offline-tools:server-job-status:1",
+  "type":"object",
+  "required":["schema_version","job_id","state","stage","created_at_utc","updated_at_utc"],
+  "properties":{"schema_version":{"const":"1.0"},"job_id":{"type":"string"},"state":{"enum":["received","running","completed","failed","cancelled"]},"stage":{"enum":["upload-received","validating","preparing","calculating","building-report","refreshing-dashboard","ready","failed"]},"progress":{"type":["number","null"],"minimum":0,"maximum":100},"created_at_utc":{"type":"string"},"updated_at_utc":{"type":"string"},"warnings":{"type":"array"},"result":{"type":["object","null"]},"error":{"type":["object","null"]}},
+  "additionalProperties":true
+}

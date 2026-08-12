@@ -4,7 +4,7 @@ description: Use for professional enterprise PDF inspection, extraction, OCR, ma
 compatibility: Offline Python/PDF/OCR toolchain bundled in the Offline Automation & Development Suite.
 metadata:
   category: Office & Documents
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # PDF Document Automation
@@ -66,3 +66,14 @@ Never remove protection to gain access. If authorized decryption credentials are
 ## Validation
 
 Reopen the produced PDF, verify page count and basic structure, render sample pages, check expected text/tables, and compare output hash/size against zero/obviously truncated artifacts.
+
+## Execution pack
+
+Use the bundled PDF contract, example and validator:
+
+- `assets/pdf-job.schema.json`
+- `templates/pdf-job.example.json`
+- `scripts/validate_pdf_output.py`
+- `scenarios/README.md`
+
+Treat successful creation as provisional until the validator reopens the PDF and, where requested, renders a representative page.

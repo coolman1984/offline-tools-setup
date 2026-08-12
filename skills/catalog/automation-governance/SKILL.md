@@ -4,7 +4,7 @@ description: Use for enterprise automation design and review when calculations, 
 compatibility: Enterprise automation projects using the Offline Automation & Development Suite.
 metadata:
   category: Agent Governance
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Automation Governance
@@ -95,3 +95,13 @@ A retry must be safe. A partial run must not masquerade as success. Publication 
 ## Agent behavior
 
 When uncertain, the agent should explain the uncertainty and ask for/route to evidence rather than inventing a mapping or business rule. Persistent decisions should be captured in the project brain so future sessions do not repeat the same ambiguity.
+
+## Execution pack
+
+Use the release receipt contract and governance scenarios:
+
+- `assets/run-receipt.schema.json`
+- `templates/run-receipt.example.json`
+- `scenarios/README.md`
+
+Every production automation should leave a run receipt. If an output cannot be tied to an input/version/control/evidence trail, treat it as incomplete even if the numbers look plausible.

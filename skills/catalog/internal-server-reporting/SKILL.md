@@ -4,7 +4,7 @@ description: Use when an enterprise reporting workflow must run on an internal s
 compatibility: Corporate internal Windows/Linux server as approved; Python, SQL Server or approved SQL database, internal web stack.
 metadata:
   category: Enterprise Automation
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Internal Server Reporting
@@ -100,3 +100,13 @@ Adding a week/month updates period dimensions, queries, charts, tables and dropd
 ## Edge cases
 
 Account for interrupted upload, duplicate upload, partial file, wrong report family, schema drift, corrupted document, locked document, server restart, worker crash, DB timeout/deadlock, disk full, temp volume full, stale lock, JSON publish failure, browser disconnect, corrected historical period, missing target/master data and unexpectedly huge row counts.
+
+## Execution pack
+
+Use these bundled components as the server starting point:
+
+- `assets/job-status.schema.json`
+- `templates/server-pipeline.py`
+- `scenarios/README.md`
+
+The template intentionally keeps web-request handling thin and durable state on disk. Production implementations must move processing to a worker/queue mechanism, preserve the same user-safe stage vocabulary and publish results atomically.

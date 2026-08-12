@@ -1,0 +1,13 @@
+{
+  "schema_version":"1.0",
+  "title":"Sample Management Dashboard",
+  "data_file":"analysis-result.json",
+  "theme":"light",
+  "period_control":true,
+  "motion":{"enabled":true,"max_ms":240},
+  "sections":[
+    {"id":"kpi-row","type":"kpis","title":"Key indicators","source":"kpis"},
+    {"id":"trend","type":"chart","title":"Revenue trend","source":"charts.revenue"},
+    {"id":"detail","type":"table","title":"Details","source":"tables.detail"}
+  ]
+}

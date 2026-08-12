@@ -1,0 +1,4 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:offline-tools:office-document-job:1","type":"object","required":["schema_version","job_id","operation","source","output","validation"],
+ "properties":{"schema_version":{"const":"1.0"},"job_id":{"type":"string"},"operation":{"enum":["inspect","transform","generate","export-pdf"]},"source":{"type":["object","null"]},"output":{"type":"object","required":["path"],"properties":{"path":{"type":"string"},"sha256":{"type":["string","null"]},"kind":{"enum":["xlsx","docx","pptx","pdf","other"]}}},"validation":{"type":"object","required":["status"],"properties":{"status":{"enum":["pending","passed","failed"]},"checks":{"type":"array"},"warnings":{"type":"array"}}}},"additionalProperties":true
+}
