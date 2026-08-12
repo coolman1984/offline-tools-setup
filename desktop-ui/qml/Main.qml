@@ -794,7 +794,11 @@ ApplicationWindow {
                                                         var version = backend.selectionVersion
                                                         return backend.isProfileSelected(modelData.id)
                                                     }
-                                                    onToggled: backend.setProfileSelected(modelData.id, checked)
+                                                    onClicked: backend.setProfileSelected(modelData.id, checked)
+                                                    enabled: {
+                                                        var scan = backend.preflight
+                                                        return backend.profileAvailable(modelData.id)
+                                                    }
                                                 }
                                                 ColumnLayout {
                                                     Layout.fillWidth: true
@@ -824,8 +828,11 @@ ApplicationWindow {
                                                                 var version = backend.selectionVersion
                                                                 return backend.isComponentSelected(profileCard.profileId, modelData.id)
                                                             }
-                                                            enabled: modelData.supported !== false
-                                                            onToggled: backend.setComponentSelected(profileCard.profileId, modelData.id, checked)
+                                                            enabled: {
+                                                                var scan = backend.preflight
+                                                                return modelData.supported !== false && backend.componentAvailable(modelData.id)
+                                                            }
+                                                            onClicked: backend.setComponentSelected(profileCard.profileId, modelData.id, checked)
                                                         }
                                                         ColumnLayout {
                                                             Layout.fillWidth: true
@@ -836,9 +843,10 @@ ApplicationWindow {
                                                                 Badge { visible: modelData.nativeOptional === true; label: "Local media"; tone: "neutral" }
                                                                 Badge { visible: modelData.heavy === true; label: "Large"; tone: "warn" }
                                                                 Badge { visible: modelData.supported === false; label: "Unavailable"; tone: "danger" }
+                                                                Badge { visible: modelData.supported !== false && !backend.componentAvailable(modelData.id); label: "Media missing"; tone: "danger" }
                                                             }
                                                             Text {
-                                                                text: modelData.supported === false ? modelData.reason : (modelData.description || backend.componentHint(modelData.id))
+                                                                text: modelData.supported === false ? modelData.reason : (!backend.componentAvailable(modelData.id) ? "Required local installation media is not included in this bundle." : (modelData.description || backend.componentHint(modelData.id)))
                                                                 color: root.textMuted
                                                                 font.pixelSize: 11
                                                                 wrapMode: Text.WordWrap

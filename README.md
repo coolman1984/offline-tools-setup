@@ -16,19 +16,21 @@ Run:
 START-HERE.cmd
 ```
 
-The launcher opens the self-contained elevated **desktop control surface** (PySide6 + Qt Quick, `desktop-ui/`) when it is present in the bundle:
+The launcher elevates itself, then opens the self-contained **desktop control surface** (PySide6 + Qt Quick, `desktop-ui/`) when it is present in the bundle:
 
 ```text
 Home  |  Setup  |  Safe Repair  |  Device Details  |  Skills Hub  |  Logs & Evidence
 ```
 
-If the desktop executable is missing from the bundle, `START-HERE.cmd` falls back in order to the tabbed console suite shell, then the setup engine alone, then the legacy console installer — each with a plain-English explanation rather than a silent failure:
+If the desktop executable is missing, `START-HERE.cmd` falls back to the tabbed console suite shell, then to the setup engine alone:
 
 ```text
 SETUP  |  SAFE REPAIR  |  DEVICE DETAILS  |  LOGS
 ```
 
-Both interfaces keep workstation setup separated from Windows repair/diagnostics and drive the same PowerShell engines under `scripts/`. See `desktop-ui/README.md` for the desktop control surface's architecture and local-development instructions.
+If none of the three interfaces are present, the launcher stops with an explicit error rather than attempting an install — that state means the folder is source code or an incomplete/corrupted bundle, and the fix is to run `BUILD-BUNDLE.cmd` on the connected builder and launch from the generated `offline-bundle` folder.
+
+Both interfaces keep workstation setup separated from Windows repair/diagnostics and drive the same PowerShell engines under `scripts/`. See `desktop-ui/README.md` for the desktop control surface's architecture and local-development instructions, and `docs/DESKTOP-UI-ARCHITECTURE.md` for how it orchestrates those engines.
 
 ## SETUP
 

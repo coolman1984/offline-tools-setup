@@ -10,7 +10,11 @@ $ProgressPreference = 'SilentlyContinue'
 $BundleRoot = [System.IO.Path]::GetFullPath($BundleRoot)
 if (-not (Test-Path $PlanPath)) { throw "Installation plan not found: $PlanPath" }
 $Plan = Get-Content $PlanPath -Raw | ConvertFrom-Json
-$InstallRoot = if ($Plan.installRoot) { [string]$Plan.installRoot } else { 'C:\OfflineTools' }
+if ($Plan.schemaVersion -ne 1) { throw "Unsupported installation plan schema: $($Plan.schemaVersion)" }
+$PlanBundleRoot = [System.IO.Path]::GetFullPath([string]$Plan.bundleRoot)
+if ($PlanBundleRoot -ne $BundleRoot) { throw 'Installation plan bundle root does not match the launched bundle.' }
+$InstallRoot = [System.IO.Path]::GetFullPath($(if ($Plan.installRoot) { [string]$Plan.installRoot } else { 'C:\OfflineTools' }))
+if ($InstallRoot -ne [System.IO.Path]::GetFullPath('C:\OfflineTools')) { throw "Unsafe or unsupported installation root: $InstallRoot" }
 $StateRoot = Join-Path $InstallRoot 'state'
 $LogRoot = Join-Path $InstallRoot 'logs'
 New-Item -ItemType Directory -Force -Path $StateRoot,$LogRoot | Out-Null
@@ -68,13 +72,30 @@ try {
     $NativeBuildSelected=(@($Plan.profiles) -contains 'native-build')
 
     Emit-Event 3 'Validating installation plan'
-    if ($Plan.schemaVersion -ne 1) { throw "Unsupported installation plan schema: $($Plan.schemaVersion)" }
-
     Emit-Event 7 'Verifying complete offline bundle integrity'
     Set-Phase 'verify'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $BundleRoot 'scripts\Verify-OfflineBundle.ps1') -BundleRoot $BundleRoot
     if ($LASTEXITCODE -ne 0) { throw "Bundle integrity verification failed with exit code $LASTEXITCODE" }
     Save-State 'verify' 'complete'
+
+    if (($AllComponents -contains 'tesseract') -and -not (Test-Path (Join-Path $BundleRoot 'payload\native\tesseract\tesseract-installer.exe'))) {
+        throw 'The plan selects Tesseract, but its verified local installation media is missing.'
+    }
+    if (($AllComponents -contains 'sql-server-express') -and -not (Test-Path (Join-Path $BundleRoot 'payload\native\sql-server-express\setup.exe'))) {
+        throw 'The plan selects SQL Server Express, but its verified local installation media is missing.'
+    }
+    if (($AllComponents -contains 'webview2') -and -not (Test-Path (Join-Path $BundleRoot 'payload\native\webview2\MicrosoftEdgeWebView2RuntimeInstallerX64.exe'))) {
+        throw 'The plan selects WebView2, but its verified local installation media is missing.'
+    }
+    if ($NativeBuildSelected -and -not (Test-Path (Join-Path $BundleRoot 'payload\native\vs-build-tools\vs_BuildTools.exe'))) {
+        throw 'The plan selects native build tools, but the verified Visual Studio layout is missing.'
+    }
+    if ($AllComponents -contains 'advanced-ocr') {
+        $HeavyRoots = @(Get-ChildItem (Join-Path $BundleRoot 'payload\wheelhouse') -Directory -Filter 'py*-ocr-heavy' -ErrorAction SilentlyContinue)
+        if ($HeavyRoots.Count -eq 0 -or (Get-ChildItem $HeavyRoots.FullName -File -Filter '_missing-packages.txt' -ErrorAction SilentlyContinue)) {
+            throw 'The plan selects advanced OCR, but its offline wheelhouse is missing or incomplete.'
+        }
+    }
 
     Emit-Event 12 'Checking corporate policy, PATH and Windows compatibility'
     Set-Phase 'environment-hardening'
@@ -95,7 +116,11 @@ try {
     Emit-Event 34 'Installing isolated Python runtimes, selected packages and managed Node.js'
     Set-Phase 'language-stack'
     $PythonProfiles=@($Plan.pythonRequirementProfiles | ForEach-Object { [string]$_ })
-    & (Join-Path $BundleRoot 'scripts\Install-OfflineTools.ps1') -InstallRoot $InstallRoot -PackageProfiles $PythonProfiles
+    if ($AllComponents -contains 'advanced-ocr') {
+        & (Join-Path $BundleRoot 'scripts\Install-OfflineTools.ps1') -InstallRoot $InstallRoot -PackageProfiles $PythonProfiles -IncludeHeavyOcr
+    } else {
+        & (Join-Path $BundleRoot 'scripts\Install-OfflineTools.ps1') -InstallRoot $InstallRoot -PackageProfiles $PythonProfiles
+    }
     if ($LASTEXITCODE -ne 0) { throw "Language and package stack failed with exit code $LASTEXITCODE" }
     Save-State 'language-stack' 'complete'
 

@@ -9,6 +9,7 @@ internal static class Program
 {
     private const string Version = "0.6.0";
     private static readonly string[] Tabs = { "SETUP", "SAFE REPAIR", "DEVICE DETAILS", "SKILLS HUB", "LOGS" };
+    private static bool HadOperationFailure;
 
     public static int Main(string[] args)
     {
@@ -33,7 +34,7 @@ internal static class Program
                 else if (key.Key == ConsoleKey.D3) selected = 2;
                 else if (key.Key == ConsoleKey.D4) selected = 3;
                 else if (key.Key == ConsoleKey.D5) selected = 4;
-                else if (key.Key is ConsoleKey.Q or ConsoleKey.Escape) return 0;
+                else if (key.Key is ConsoleKey.Q or ConsoleKey.Escape) return HadOperationFailure ? 1 : 0;
                 else if (key.Key == ConsoleKey.Enter)
                 {
                     switch (selected)
@@ -103,8 +104,9 @@ internal static class Program
         AnsiConsole.Clear();
         var exe = Path.Combine(bundleRoot, "payload", "bootstrap", "OfflineToolsSetup.exe");
         if (!File.Exists(exe)) { ShowError("Setup engine is missing from the bundle.", exe); return; }
-        RunConsoleProcess(exe, new[] { "--bundle-root", bundleRoot }, bundleRoot);
-        Pause("Setup engine returned to the suite.");
+        var code = RunConsoleProcess(exe, new[] { "--bundle-root", bundleRoot }, bundleRoot);
+        if (code != 0) { ShowError($"Setup engine ended with code {code}.", @"Review C:\OfflineTools\logs and C:\OfflineTools\state."); return; }
+        Pause("Setup engine completed successfully and returned to the suite.");
     }
 
     private static void RunSkillsHub(string bundleRoot)
@@ -112,7 +114,8 @@ internal static class Program
         AnsiConsole.Clear();
         var exe = Path.Combine(bundleRoot, "payload", "bootstrap", "OfflineSkillsHub.exe");
         if (!File.Exists(exe)) { ShowError("Developer Skills Hub is missing from the bundle.", exe); return; }
-        RunConsoleProcess(exe, new[] { bundleRoot }, bundleRoot);
+        var code = RunConsoleProcess(exe, new[] { bundleRoot }, bundleRoot);
+        if (code != 0) { ShowError($"Skills Hub ended with code {code}.", exe); return; }
         Pause("Skills Hub returned to the suite.");
     }
 
@@ -171,8 +174,8 @@ internal static class Program
             }
             else if (!AnsiConsole.Confirm("Run the selected diagnostics?", true)) continue;
 
-            RunCareEngine(bundleRoot, actions);
-            Pause("Windows Care finished. Review its summary/evidence before applying further repairs.");
+            if (RunCareEngine(bundleRoot, actions) == 0)
+                Pause("Windows Care finished. Review its summary/evidence before applying further repairs.");
         }
     }
 
@@ -195,14 +198,16 @@ internal static class Program
         AnsiConsole.Write(new Panel(table) { Header = new PanelHeader("  EXECUTION PLAN  "), Border = BoxBorder.Double });
     }
 
-    private static void RunCareEngine(string bundleRoot, List<CareAction> actions)
+    private static int RunCareEngine(string bundleRoot, List<CareAction> actions)
     {
         var script = Path.Combine(bundleRoot, "scripts", "Invoke-SafeWindowsCare.ps1");
-        if (!File.Exists(script)) { ShowError("Windows Care backend is missing.", script); return; }
+        if (!File.Exists(script)) { ShowError("Windows Care backend is missing.", script); return 1; }
         var ids = string.Join(',', actions.Select(a => a.Id));
         AnsiConsole.Clear();
         RenderSectionHeader("WINDOWS CARE RUN", "Do not close the window while a selected Windows servicing check is active.");
-        RunConsoleProcess(ResolvePowerShell(bundleRoot), new[] { "-NoLogo", "-NoProfile", "-File", script, "-Actions", ids, "-BundleRoot", bundleRoot }, bundleRoot);
+        var code = RunConsoleProcess(ResolvePowerShell(bundleRoot), new[] { "-NoLogo", "-NoProfile", "-File", script, "-Actions", ids, "-BundleRoot", bundleRoot }, bundleRoot);
+        if (code != 0) ShowError($"Windows Care ended with code {code}.", @"Review C:\OfflineTools\logs and C:\OfflineTools\state.");
+        return code;
     }
 
     private static void RunDeviceDetails(string bundleRoot)
@@ -212,7 +217,8 @@ internal static class Program
         var script = Path.Combine(bundleRoot, "scripts", "Get-DeviceInventory.ps1");
         if (!File.Exists(script)) { ShowError("Device inventory backend is missing.", script); return; }
         var output = @"C:\OfflineTools\state\device-inventory.json";
-        RunConsoleProcess(ResolvePowerShell(bundleRoot), new[] { "-NoLogo", "-NoProfile", "-File", script, "-OutputPath", output, "-SummaryOnly" }, bundleRoot);
+        var code = RunConsoleProcess(ResolvePowerShell(bundleRoot), new[] { "-NoLogo", "-NoProfile", "-File", script, "-OutputPath", output, "-SummaryOnly" }, bundleRoot);
+        if (code != 0) { ShowError($"Device inventory ended with code {code}.", output); return; }
         if (!File.Exists(output)) { ShowError("Device inventory did not produce its structured output.", output); return; }
 
         while (true)
@@ -352,6 +358,7 @@ internal static class Program
 
     private static void ShowError(string message, string detail)
     {
+        HadOperationFailure = true;
         AnsiConsole.Write(new Panel($"[red bold]{Markup.Escape(message)}[/]\n[grey]{Markup.Escape(detail)}[/]")
         {
             Border = BoxBorder.Double, Header = new PanelHeader("  ERROR  ")

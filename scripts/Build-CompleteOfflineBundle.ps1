@@ -38,6 +38,15 @@ $CoreArgs = @('-OutputDir',$OutputDir)
 if ($IncludeHeavyOcr) { $CoreArgs += '-IncludeHeavyOcr' }
 & (Join-Path $PSScriptRoot 'Build-OfflineBundle.ps1') @CoreArgs
 if ($LASTEXITCODE -ne 0) { throw "Core bundle builder failed with exit code $LASTEXITCODE" }
+$HeavyOcrIncluded = $false
+if ($IncludeHeavyOcr) {
+    $HeavyOcrDirs = @(Get-ChildItem (Join-Path $OutputDir 'payload\wheelhouse') -Directory -Filter 'py*-ocr-heavy' -ErrorAction SilentlyContinue)
+    $HeavyOcrFailures = @(Get-ChildItem (Join-Path $OutputDir 'payload\wheelhouse') -File -Filter '_missing-packages.txt' -Recurse -ErrorAction SilentlyContinue)
+    if ($HeavyOcrDirs.Count -ne @($Manifest.python.versions).Count -or $HeavyOcrFailures.Count -gt 0) {
+        throw 'Heavy OCR was requested, but one or more Python versions have an incomplete offline wheelhouse.'
+    }
+    $HeavyOcrIncluded = $true
+}
 
 Write-Step 'Adding Microsoft runtime prerequisites for both x64 and x86 applications'
 $MicrosoftDir = Join-Path $OutputDir 'payload\installers\microsoft'
@@ -197,6 +206,7 @@ $NativeStatus = [pscustomobject]@{
     sqlOdbc = $true
     sqlServerExpressMedia = $SqlIncluded
     tesseract = $TesseractIncluded
+    heavyOcrWheelhouse = $HeavyOcrIncluded
     visualStudioBuildToolsMedia = $BuildToolsIncluded
     webView2 = $WebView2Included
     netFramework35MatchingWindowsMedia = $NetFx35SourceIncluded
@@ -227,6 +237,10 @@ $HashEntries = Get-ChildItem $OutputDir -File -Recurse | Where-Object { $_.Name 
     }
 }
 $HashEntries | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $OutputDir 'bundle-sha256.json') -Encoding UTF8
+
+Write-Step 'Verifying the completed bundle before declaring it ready'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $OutputDir 'scripts\Verify-OfflineBundle.ps1') -BundleRoot $OutputDir
+if ($LASTEXITCODE -ne 0) { throw "Final bundle verification failed with exit code $LASTEXITCODE" }
 
 if ($CreateZip) {
     Write-Step 'Creating final transport ZIP'

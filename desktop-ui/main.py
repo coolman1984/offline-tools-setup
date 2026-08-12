@@ -32,9 +32,11 @@ def ensure_windows_admin() -> bool:
     parameters = subprocess.list2cmdline(args)
     try:
         result = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, parameters, None, 1)
-        return int(result) <= 32
+        if int(result) > 32:
+            return False
+        raise OSError(f"Administrator elevation failed with ShellExecute code {int(result)}")
     except (AttributeError, OSError, TypeError):
-        return True
+        raise RuntimeError("Administrator elevation was cancelled or could not be started.")
 
 
 def main() -> int:

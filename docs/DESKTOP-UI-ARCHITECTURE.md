@@ -4,7 +4,7 @@
 
 `desktop-ui/` is the primary interface for the Offline Automation & Development Suite: a self-contained Windows x64 desktop application that presents Setup, Safe Repair, Device Details, Skills Hub and Logs & Evidence as a single always-visible left-rail navigation, rather than the sequential full-screen prompts of a console tool.
 
-It supersedes `installer-ui/` and `suite-shell/` as the interface `START-HERE.cmd` launches by default. Those two .NET/Spectre.Console applications, plus `skills-hub/`, remain in the bundle as fallbacks and for functionality the desktop UI does not yet reimplement (see [Migration status](#migration-status)).
+It supersedes `installer-ui/` and `suite-shell/` as the interface `START-HERE.cmd` launches by default. Those two .NET/Spectre.Console applications, plus `skills-hub/`, remain in the bundle as fallbacks and for functionality the desktop UI does not yet reimplement (see [Migration status](#migration-status)). `START-HERE.cmd` elevates itself before launching any of them, so the child process's exit code is preserved rather than lost to a detached elevated window; if none of the three executables are present it stops with an explicit error instead of falling through to an install path.
 
 The desktop UI is a presentation and orchestration layer only. It does not reimplement setup, diagnostic or inventory logic — every action it exposes shells out to the same PowerShell engines under `scripts/` that the console tools use, so behavior and safety guarantees stay identical across interfaces.
 
@@ -27,7 +27,7 @@ desktop-ui/
   tests/               pytest suite for backend.py
 ```
 
-`main.py` does three things before handing off to Qt: requests UAC elevation via `ShellExecuteW(..., "runas", ...)` and exits the unelevated process if a new elevated one was launched (`ensure_windows_admin`); forces the Fluent light style; and resolves the bundle root (`--bundle-root <path>` argument, `OFFLINE_TOOLS_BUNDLE_ROOT` environment variable, or a walk up from the current working directory / executable directory looking for `config/setup-profiles.json`), falling back to the repository checkout root so the UI can run against a bare `git clone` before a full offline bundle exists.
+`main.py` does three things before handing off to Qt: requests UAC elevation via `ShellExecuteW(..., "runas", ...)` and exits the unelevated process if a new elevated one was launched, raising rather than silently continuing unprivileged if elevation is cancelled or fails (`ensure_windows_admin`); forces the Fluent light style; and resolves the bundle root (`--bundle-root <path>` argument, `OFFLINE_TOOLS_BUNDLE_ROOT` environment variable, or a walk up from the current working directory / executable directory looking for `config/setup-profiles.json`), falling back to the repository checkout root so the UI can run against a bare `git clone` before a full offline bundle exists.
 
 `backend.py` is a single `QObject` subclass (`AppBackend`) exposed to QML as the `backend` context property. It owns:
 

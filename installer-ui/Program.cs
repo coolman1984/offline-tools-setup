@@ -40,6 +40,12 @@ internal static class Program
                 return 5;
             }
 
+            if (!scan.BundleManifestPresent || !scan.ProfessionalUiPresent)
+            {
+                AnsiConsole.MarkupLine("\n[red bold]The offline bundle is incomplete or corrupted.[/] Rebuild it on the connected builder before installing.");
+                return 21;
+            }
+
             if (options.DiagnosticsOnly)
             {
                 RenderDiagnosticsFooter(scan);
@@ -47,7 +53,7 @@ internal static class Program
             }
 
             var selection = !string.IsNullOrWhiteSpace(options.Preset)
-                ? BuildPresetSelection(config, options.Preset!, options.Preset!.Equals("complete", StringComparison.OrdinalIgnoreCase))
+                ? BuildPresetSelection(config, options.Preset!, options.Preset!.Equals("complete", StringComparison.OrdinalIgnoreCase), scan)
                 : RunInteractiveSelection(config, scan);
 
             if (selection.ExitRequested)
@@ -194,6 +200,14 @@ internal static class Program
                 scan.BundleManifestPresent = File.Exists(Path.Combine(bundleRoot, "bundle-sha256.json"));
                 scan.SqlServerMediaPresent = File.Exists(Path.Combine(bundleRoot, "payload", "native", "sql-server-express", "setup.exe"));
                 scan.TesseractMediaPresent = File.Exists(Path.Combine(bundleRoot, "payload", "native", "tesseract", "tesseract-installer.exe"));
+                scan.VisualStudioBuildToolsMediaPresent = File.Exists(Path.Combine(bundleRoot, "payload", "native", "vs-build-tools", "vs_BuildTools.exe"));
+                scan.WebView2MediaPresent = File.Exists(Path.Combine(bundleRoot, "payload", "native", "webview2", "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"));
+                var wheelhouse = Path.Combine(bundleRoot, "payload", "wheelhouse");
+                var heavyOcrDirs = Directory.Exists(wheelhouse)
+                    ? Directory.EnumerateDirectories(wheelhouse, "py*-ocr-heavy").ToList()
+                    : new List<string>();
+                scan.HeavyOcrPresent = heavyOcrDirs.Count > 0 && heavyOcrDirs.All(path =>
+                    Directory.EnumerateFiles(path, "*.whl").Any() && !File.Exists(Path.Combine(path, "_missing-packages.txt")));
                 scan.ProfessionalUiPresent = File.Exists(Path.Combine(bundleRoot, "payload", "bootstrap", "OfflineToolsSetup.exe"));
                 Thread.Sleep(150);
             });
@@ -232,6 +246,10 @@ internal static class Program
             AnsiConsole.MarkupLine("[grey]Optional SQL Server Express media is not present and will not be selectable.[/]");
         if (!scan.TesseractMediaPresent)
             AnsiConsole.MarkupLine("[grey]Optional Tesseract media is not present and will not be selectable.[/]");
+        if (!scan.VisualStudioBuildToolsMediaPresent)
+            AnsiConsole.MarkupLine("[grey]Native build profile media is not present and the profile will not be selectable.[/]");
+        if (!scan.WebView2MediaPresent)
+            AnsiConsole.MarkupLine("[grey]Optional WebView2 media is not present and will not be selectable.[/]");
     }
 
     private static void AddScanRow(Table table, string name, bool good, string details)
@@ -256,10 +274,10 @@ internal static class Program
 
         return action switch
         {
-            "Recommended Professional Setup" => BuildPresetSelection(config, "recommended", false),
-            "Automation & Office Workstation" => BuildPresetSelection(config, "automation", false),
-            "Full-Stack Development Workstation" => BuildPresetSelection(config, "webdev", false),
-            "Complete Workstation" => BuildPresetSelection(config, "complete", true),
+            "Recommended Professional Setup" => BuildPresetSelection(config, "recommended", false, scan),
+            "Automation & Office Workstation" => BuildPresetSelection(config, "automation", false, scan),
+            "Full-Stack Development Workstation" => BuildPresetSelection(config, "webdev", false, scan),
+            "Complete Workstation" => BuildPresetSelection(config, "complete", true, scan),
             "Custom Selection" => BuildCustomSelection(config, scan),
             "Diagnostics Only" => DiagnosticsAndExit(scan),
             _ => InstallSelection.Exit()
@@ -280,8 +298,9 @@ internal static class Program
             .PageSize(12)
             .UseConverter(p => $"[bold]{Markup.Escape(p.DisplayName)}[/] [grey]- {Markup.Escape(p.Description)}[/]");
 
-        prompt.AddChoices(config.Profiles);
-        foreach (var profile in config.Profiles.Where(p => p.Recommended))
+        var availableProfiles = config.Profiles.Where(p => IsProfileAvailable(p, scan)).ToList();
+        prompt.AddChoices(availableProfiles);
+        foreach (var profile in availableProfiles.Where(p => p.Recommended))
             prompt.Select(profile);
 
         var chosenProfiles = AnsiConsole.Prompt(prompt);
@@ -328,24 +347,40 @@ internal static class Program
             return scan.TesseractMediaPresent;
         if (component.Id.Equals("sql-server-express", StringComparison.OrdinalIgnoreCase))
             return scan.SqlServerMediaPresent;
+        if (component.Id.Equals("webview2", StringComparison.OrdinalIgnoreCase))
+            return scan.WebView2MediaPresent;
+        if (component.Id.Equals("advanced-ocr", StringComparison.OrdinalIgnoreCase))
+            return scan.HeavyOcrPresent;
         return true;
     }
 
-    private static InstallSelection BuildPresetSelection(SetupConfiguration config, string presetId, bool includeAllSupportedComponents)
+    private static bool IsProfileAvailable(ProfileDefinition profile, PreflightScan scan)
+    {
+        return !profile.Id.Equals("native-build", StringComparison.OrdinalIgnoreCase) || scan.VisualStudioBuildToolsMediaPresent;
+    }
+
+    private static InstallSelection BuildPresetSelection(SetupConfiguration config, string presetId, bool includeAllSupportedComponents, PreflightScan scan)
     {
         var preset = config.Presets.FirstOrDefault(p => p.Id.Equals(presetId, StringComparison.OrdinalIgnoreCase))
                      ?? throw new InvalidOperationException($"Unknown preset: {presetId}");
 
         var components = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var availableProfileIds = new List<string>();
         foreach (var profileId in preset.Profiles)
         {
             var profile = config.Profiles.First(p => p.Id.Equals(profileId, StringComparison.OrdinalIgnoreCase));
+            if (!IsProfileAvailable(profile, scan))
+            {
+                AnsiConsole.MarkupLine($"[yellow]Skipped unavailable profile:[/] {Markup.Escape(profile.DisplayName)} [grey](required local media is missing)[/]");
+                continue;
+            }
+            availableProfileIds.Add(profile.Id);
             components[profile.Id] = profile.Components
-                .Where(c => c.Supported != false && (includeAllSupportedComponents || c.SelectedByDefault))
+                .Where(c => c.Supported != false && IsComponentAvailable(c, scan) && (includeAllSupportedComponents || c.SelectedByDefault))
                 .Select(c => c.Id)
                 .ToList();
         }
-        return BuildSelection(config, preset.Profiles, components);
+        return BuildSelection(config, availableProfileIds, components);
     }
 
     private static InstallSelection BuildSelection(SetupConfiguration config, List<string> profileIds, Dictionary<string, List<string>> components)
@@ -720,6 +755,9 @@ internal sealed class PreflightScan
     public bool BundleManifestPresent { get; set; }
     public bool SqlServerMediaPresent { get; set; }
     public bool TesseractMediaPresent { get; set; }
+    public bool VisualStudioBuildToolsMediaPresent { get; set; }
+    public bool WebView2MediaPresent { get; set; }
+    public bool HeavyOcrPresent { get; set; }
     public bool ProfessionalUiPresent { get; set; }
 }
 

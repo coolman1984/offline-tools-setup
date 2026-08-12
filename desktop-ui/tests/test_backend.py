@@ -44,10 +44,30 @@ def test_apply_preset_switches_selection_and_active_preset(backend):
     backend.applyPreset("complete")
     assert backend.activePreset == "complete"
     assert backend.selectionVersion == before + 1
-    # "complete" is defined to include every profile in setup-profiles.json.
+    # "complete" selects every profile whose required local media is present in
+    # the bundle. Profiles gated on media that isn't there (native-build needs
+    # the Visual Studio Build Tools payload) are deliberately left unselected
+    # rather than queued up to fail during install.
     all_profile_ids = {p["id"] for p in backend.appData["profiles"]}
+    expected = {p for p in all_profile_ids if backend.profileAvailable(p)}
     selected_ids = {p for p in all_profile_ids if backend.isProfileSelected(p)}
-    assert selected_ids == all_profile_ids
+    assert selected_ids == expected
+
+
+def test_unavailable_profile_cannot_be_selected(backend):
+    # A bare checkout has no native media payload, so native-build is gated.
+    if backend.profileAvailable("native-build"):
+        pytest.skip("Visual Studio Build Tools media is present in this tree")
+    backend.setProfileSelected("native-build", True)
+    assert backend.isProfileSelected("native-build") is False
+
+
+def test_unavailable_component_cannot_be_selected(backend):
+    if backend.componentAvailable("tesseract"):
+        pytest.skip("Tesseract media is present in this tree")
+    backend.setProfileSelected("ocr", True)
+    backend.setComponentSelected("ocr", "tesseract", True)
+    assert backend.isComponentSelected("ocr", "tesseract") is False
 
 
 def test_apply_unknown_preset_does_not_change_the_active_selection(backend):
