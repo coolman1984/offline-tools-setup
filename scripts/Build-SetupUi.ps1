@@ -98,19 +98,28 @@ Remove-Item $BundleSkillsRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $BundleSkillsRoot | Out-Null
 Copy-Item (Join-Path $CanonicalSkills '*') $BundleSkillsRoot -Recurse -Force
 
+Write-Step 'Building the primary PySide6 Fluent desktop control surface'
+& (Join-Path $PSScriptRoot 'Build-PySide6Ui.ps1') -BundleRoot $BundleRoot
+if ($LASTEXITCODE -ne 0) { throw "PySide6 desktop UI builder failed with exit code $LASTEXITCODE" }
+$DesktopExe = Join-Path $BootstrapRoot 'OfflineToolsDesktop.exe'
+if (-not (Test-Path $DesktopExe)) { throw 'Primary PySide6 desktop executable was not found after build.' }
+
 [pscustomobject]@{
     builtAtUtc = [DateTime]::UtcNow.ToString('o')
     dotnetSdk = $ActualSdk
     runtimeIdentifier = 'win-x64'
     selfContained = $true
     singleFile = $true
-    launcher = 'OfflineToolsSuite.exe'
+    launcher = 'OfflineToolsDesktop.exe'
+    desktopUi = 'OfflineToolsDesktop.exe'
+    consoleFallback = 'OfflineToolsSuite.exe'
     setupEngine = 'OfflineToolsSetup.exe'
     skillsHub = 'OfflineSkillsHub.exe'
     canonicalSkills = @(Get-ChildItem $BundleSkillsRoot -Directory | Select-Object -ExpandProperty Name)
 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $BootstrapRoot 'build-info.json') -Encoding UTF8
 
-Write-Host "Tabbed suite shell ready: $(Join-Path $BootstrapRoot 'OfflineToolsSuite.exe')" -ForegroundColor Green
+Write-Host "Primary desktop UI ready: $DesktopExe" -ForegroundColor Green
+Write-Host "Console suite fallback ready: $(Join-Path $BootstrapRoot 'OfflineToolsSuite.exe')" -ForegroundColor Green
 Write-Host "Professional setup engine ready: $(Join-Path $BootstrapRoot 'OfflineToolsSetup.exe')" -ForegroundColor Green
 Write-Host "Developer Skills Hub ready: $(Join-Path $BootstrapRoot 'OfflineSkillsHub.exe')" -ForegroundColor Green
 Write-Host "Pinned build SDK: $ActualSdk" -ForegroundColor Green
