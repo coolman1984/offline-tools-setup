@@ -3,7 +3,6 @@ import QtQuick.Layouts
 
 SurfaceCard {
     id: tile
-    required property var theme
     property string eyebrow: "STATUS"
     property string value: "—"
     property string note: ""
