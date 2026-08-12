@@ -281,7 +281,7 @@ ApplicationWindow {
                     anchors.fill: parent
                     anchors.margins: 12
                     wrapMode: Text.WordWrap
-                    text: "The suite never disables security controls, changes boot or encryption settings, deletes user folders, or performs aggressive registry cleaning."
+                    text: backend.guardrailSummary
                     color: root.warning
                     font.pixelSize: 12
                 }
@@ -919,6 +919,7 @@ ApplicationWindow {
                                     RadioButton {
                                         text: "Custom"
                                         checked: root.selectedCarePreset === "custom"
+                                        onClicked: root.selectedCarePreset = "custom"
                                     }
                                 }
                             }
@@ -950,7 +951,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         spacing: 3
                                         Text { text: "Built-in safety boundaries"; color: root.textStrong; font.pixelSize: 14; font.weight: Font.DemiBold }
-                                        Text { text: "No user-folder cleanup, no security-policy bypass, no boot or encryption changes, no manual Windows Installer cache deletion, and no aggressive registry cleaners."; color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                        Text { text: backend.guardrailSummary; color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                                     }
                                 }
                             }

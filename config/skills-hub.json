@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "productName": "Developer Skills Hub",
   "managedRoot": "C:\\OfflineTools\\SkillsHub",
-  "canonicalLibraryRelativePath": "skills\\catalog",
+  "canonicalLibraryRelativePath": "skills/catalog",
   "policies": {
     "targetDownloadsAllowed": false,
     "executeImportedScriptsAutomatically": false,

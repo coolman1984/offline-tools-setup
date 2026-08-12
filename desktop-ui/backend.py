@@ -101,6 +101,8 @@ class AppBackend(QObject):
         self._selected_profiles: set[str] = set()
         self._selected_components: dict[str, set[str]] = {}
         self._selected_care: set[str] = set()
+        self._care_action_total = 0
+        self._care_action_done = 0
         self._app_data: dict[str, Any] = {}
         self._preflightScanned.connect(self._apply_preflight)
         self._apply_preset_internal("recommended")
@@ -171,6 +173,29 @@ class AppBackend(QObject):
             "longCount": len(long_actions),
             "hasRepairs": bool(repairs),
         }
+
+    GUARDRAIL_LABELS: dict[str, str] = {
+        "neverDeleteUserFolders": "deletes user folders",
+        "neverDisableSecurityControls": "disables security controls",
+        "neverModifyBootConfiguration": "changes boot, WinRE, BitLocker or Secure Boot configuration",
+        "neverDeleteWinSxSManually": "manually deletes the WinSxS component store",
+        "neverDeleteWindowsInstallerCache": "deletes the Windows Installer cache",
+        "neverUseDismResetBase": "runs DISM with ResetBase",
+        "neverForceChkdskOfflineRepairByDefault": "schedules an offline CHKDSK repair automatically",
+        "neverDeleteUpdateRollbackDataWithoutExplicitAdvancedChoice": "deletes Windows Update rollback data without an explicit advanced choice",
+    }
+
+    @Property(str, notify=dataChanged)
+    def guardrailSummary(self) -> str:
+        guardrails = self.care_config.get("guardrails", {})
+        clauses = [label for key, label in self.GUARDRAIL_LABELS.items() if guardrails.get(key)]
+        if not clauses:
+            return "This suite follows conservative Windows Care guardrails."
+        if len(clauses) == 1:
+            body = clauses[0]
+        else:
+            body = ", ".join(clauses[:-1]) + " or " + clauses[-1]
+        return f"The suite never {body}."
 
     @Slot(str)
     def applyPreset(self, preset_id: str) -> None:
@@ -440,6 +465,8 @@ class AppBackend(QObject):
             return
         actions = ",".join(sorted(self._selected_care))
         args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Actions", actions, "-BundleRoot", str(self.bundle_root)]
+        self._care_action_total = len(self._selected_care)
+        self._care_action_done = 0
         self._start_process("care", self._powershell_path(), args)
 
     @Slot()
@@ -533,6 +560,17 @@ class AppBackend(QObject):
                         percent = max(0.0, min(100.0, float(parts[1])))
                     except ValueError:
                         percent = 0.0
+                    self.progressChanged.emit(percent, parts[2])
+            elif line.startswith("@@CARE|"):
+                # Invoke-SafeWindowsCare.ps1 reports per-action status as
+                # "@@CARE|<action-id>|<message>" instead of a percentage, so
+                # progress is estimated from how many of the selected actions
+                # have reported in.
+                parts = line.split("|", 2)
+                if len(parts) == 3:
+                    self._care_action_done += 1
+                    total = max(self._care_action_total, self._care_action_done)
+                    percent = max(0.0, min(99.0, (self._care_action_done / total) * 100.0))
                     self.progressChanged.emit(percent, parts[2])
 
     @Slot()
