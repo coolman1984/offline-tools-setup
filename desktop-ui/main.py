@@ -50,9 +50,10 @@ def main() -> int:
     app.setApplicationName("Offline Automation & Development Suite")
     app.setOrganizationName("Offline Tools")
     app.setOrganizationDomain("local.offlinetools")
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont("Segoe UI Variable", 10))
 
-    # Keep this product intentionally light even when Windows is using dark mode.
+    # The product intentionally stays light so workstation status and warnings
+    # remain visually consistent on locked-down corporate PCs.
     try:
         app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     except (AttributeError, TypeError):
@@ -63,7 +64,7 @@ def main() -> int:
 
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", backend)
-    qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
+    qml_path = Path(__file__).resolve().parent / "qml" / "PremiumMain.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
     if not engine.rootObjects():
         return 2
